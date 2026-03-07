@@ -1,0 +1,2456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oil Sentinel — Global Energy Intelligence</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+/* ── RESET & BASE ── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #020617;
+  color: #cbd5e1;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── HEADER ── */
+#header {
+  height: 64px;
+  background: rgba(15,23,42,.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid #1e293b;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  z-index: 1000;
+  flex-shrink: 0;
+}
+#header-brand { display:flex; align-items:center; gap:12px; }
+#brand-icon {
+  width:38px; height:38px; background:linear-gradient(135deg,#2563eb,#1d4ed8);
+  border-radius:10px; display:flex; align-items:center; justify-content:center;
+  font-size:18px; box-shadow:0 0 20px rgba(37,99,235,.35); flex-shrink:0;
+}
+#brand-text h1 {
+  font-size:15px; font-weight:800; color:#f1f5f9;
+  letter-spacing:.3px; display:flex; align-items:center; gap:8px;
+}
+#brand-tag {
+  font-size:9px; background:#1e293b; color:#64748b; border-radius:4px;
+  padding:2px 6px; font-weight:700; letter-spacing:.5px; vertical-align:middle;
+}
+#brand-text .sub {
+  font-size:9px; color:#475569; margin-top:2px; text-transform:uppercase;
+  letter-spacing:.7px; font-weight:600;
+}
+
+/* Header stat chips */
+#stats { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.sb {
+  background: rgba(30,41,59,.7);
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 6px 12px;
+  text-align: center;
+  min-width: 90px;
+  transition: border-color .2s, background .2s;
+  cursor: default;
+}
+.sb:hover { border-color:#334155; background:rgba(30,41,59,.9); }
+.sb .v { font-size:13px; font-weight:800; color:#93c5fd; line-height:1.15; letter-spacing:.3px; }
+.sb .l { font-size:7.5px; color:#475569; text-transform:uppercase; letter-spacing:.6px; margin-top:3px; font-weight:600; }
+.sb.red   { border-color:rgba(239,68,68,.25); background:rgba(239,68,68,.06); }
+.sb.red .v   { color:#f87171; }
+.sb.amber { border-color:rgba(245,158,11,.25); background:rgba(245,158,11,.06); }
+.sb.amber .v { color:#fbbf24; }
+.sb.green { border-color:rgba(34,197,94,.2); background:rgba(34,197,94,.05); }
+.sb.green .v { color:#4ade80; }
+.sb.cyan  { border-color:rgba(6,182,212,.25); background:rgba(6,182,212,.05); }
+.sb.cyan .v  { color:#22d3ee; }
+.sb.purple{ border-color:rgba(139,92,246,.25); background:rgba(139,92,246,.06); }
+.sb.purple .v{ color:#a78bfa; }
+/* Hormuz-dynamic chip indicator */
+.sb.hormuz-dynamic { position:relative; }
+.sb.hormuz-dynamic::after {
+  content:'⚡';font-size:7px;position:absolute;top:3px;right:4px;
+  color:#ef4444;animation:badgePulse 2s ease-in-out infinite;
+}
+
+/* Refresh area */
+#rinfo { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+#rinfo .ts { color:#475569; font-size:9px; font-weight:500; }
+#rinfo #nxt { color:#334155; font-size:8px; }
+#rbtn {
+  font-size:10px;
+  background: rgba(30,41,59,.8);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all .15s;
+  font-weight: 600;
+  letter-spacing: .3px;
+}
+#rbtn:hover { background:#1e293b; color:#bfdbfe; border-color:#3b82f6; }
+
+/* ── LAYOUT ── */
+#layout { display:flex; height:calc(100vh - 128px); }
+#map-wrap { flex:1; position:relative; }
+#map { width:100%; height:100%; background:#0d1b2a; }
+.leaflet-container { background:#0d1b2a !important; }
+/* Country name labels */
+.country-label {
+  background:transparent; border:none; box-shadow:none;
+  font-family:'Calibri','Segoe UI',sans-serif; font-size:9px; font-weight:600;
+  color:#ffffff; white-space:nowrap; pointer-events:none;
+  text-shadow:0 0 4px rgba(0,0,0,.9), 0 0 8px rgba(0,0,0,.7);
+  letter-spacing:.3px;
+}
+
+/* ── LEFT SIDEBAR ── */
+#sb-wrap {
+  width: 300px;
+  flex-shrink: 0;
+  background: rgba(15,23,42,.6);
+  border-right: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  order: -1;
+}
+
+/* Sidebar tab bar */
+#sb-tabs {
+  display: flex;
+  flex-shrink: 0;
+  padding: 10px 12px 0;
+  gap: 4px;
+  background: rgba(15,23,42,.8);
+  border-bottom: 1px solid #1e293b;
+}
+.sbt {
+  flex: 1;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #475569;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all .15s;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  user-select: none;
+}
+.sbt:hover { color: #94a3b8; }
+.sbt.active { color: #93c5fd; border-bottom-color: #3b82f6; }
+.sb-panel { display:none; flex:1; flex-direction:column; overflow:hidden; }
+.sb-panel.active { display:flex; }
+#panel-analysis { overflow-y:auto; }
+
+/* Section headers */
+.pt {
+  font-size: 9px;
+  color: #475569;
+  font-weight: 800;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  padding: 8px 14px 6px;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+  background: rgba(15,23,42,.5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pt-badge {
+  font-size:8px; font-weight:800; border-radius:20px; padding:2px 8px;
+  background:rgba(239,68,68,.15); color:#f87171; border:1px solid rgba(239,68,68,.25);
+}
+.pt-badge.warn { background:rgba(245,158,11,.1); color:#fbbf24; border-color:rgba(245,158,11,.2); }
+.pt-badge.ok   { background:rgba(34,197,94,.1);  color:#4ade80; border-color:rgba(34,197,94,.2); }
+
+/* EIA panel */
+#eia-rows { padding-bottom:4px; flex-shrink:0; border-bottom:1px solid #1e293b; }
+.er {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:5px 14px; border-bottom:1px solid #0f172a; font-size:10px;
+}
+.er:last-child { border:none; }
+.el { color:#475569; }
+.ev { font-weight:700; color:#e2e8f0; }
+.ec { font-size:9px; margin-left:5px; }
+.up   { color:#4ade80; }
+.dn   { color:#f87171; }
+.fl   { color:#334155; }
+
+/* Country list */
+#clist { overflow-y:auto; flex:1; }
+.cr {
+  display: flex;
+  align-items: center;
+  padding: 9px 14px;
+  border-bottom: 1px solid #0f172a;
+  cursor: pointer;
+  transition: background .1s, transform .1s;
+}
+.cr:hover { background: rgba(30,41,59,.6); }
+.cf { font-size:16px; margin-right:10px; line-height:1; flex-shrink:0; }
+.ci { flex:1; min-width:0; }
+.cn2 { font-size:11px; font-weight:700; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cd  { font-size:9px; color:#475569; margin-top:2px; }
+.db  { font-size:9px; font-weight:800; border-radius:6px; padding:3px 8px; white-space:nowrap; margin-left:6px; }
+.dc  { background:rgba(239,68,68,.15);  color:#f87171; border:1px solid rgba(239,68,68,.25); }
+.dw  { background:rgba(245,158,11,.1);  color:#fbbf24; border:1px solid rgba(245,158,11,.2); }
+.do  { background:rgba(34,197,94,.1);   color:#4ade80; border:1px solid rgba(34,197,94,.2); }
+.dy  { background:rgba(234,179,8,.1);   color:#eab308; border:1px solid rgba(234,179,8,.2); }
+
+/* Country search */
+#search-wrap {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+  position: relative;
+  background: rgba(15,23,42,.5);
+}
+#csearch {
+  width: 100%;
+  background: rgba(30,41,59,.8);
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 12px 7px 32px;
+  font-size: 10px;
+  outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 10px center;
+  transition: border-color .15s;
+  font-family: inherit;
+}
+#csearch:focus { border-color:#3b82f6; background:rgba(30,41,59,1); }
+#csearch::placeholder { color:#334155; }
+#search-suggest {
+  position:absolute; left:14px; right:14px; top:calc(100% - 8px); z-index:500;
+  background:#0f172a; border:1px solid #1e293b; border-top:none;
+  border-radius:0 0 8px 8px; overflow:hidden; display:none;
+  box-shadow:0 8px 20px rgba(0,0,0,.6);
+}
+.ss-item {
+  display:flex; align-items:center; gap:8px; padding:7px 12px;
+  font-size:10px; cursor:pointer; border-bottom:1px solid #0f172a;
+}
+.ss-item:last-child { border:none; }
+.ss-item:hover { background:#1e293b; }
+.ss-flag { font-size:14px; }
+.ss-name { flex:1; color:#94a3b8; }
+.ss-days { font-size:9px; font-weight:700; }
+
+/* Feed */
+#feed { flex:1; overflow-y:auto; }
+.fi {
+  padding: 10px 14px;
+  border-bottom: 1px solid #0f172a;
+  cursor: pointer;
+  transition: background .1s;
+}
+.fi:hover { background: rgba(30,41,59,.4); }
+.fs { font-size:9px; color:#3b82f6; font-weight:800; text-transform:uppercase; letter-spacing:.5px; }
+.ft { font-size:10px; color:#94a3b8; line-height:1.5; margin-top:3px; }
+.fw { font-size:9px; color:#1e293b; margin-top:2px; }
+.ftag {
+  display:inline-block; font-size:8px; border-radius:4px; padding:2px 6px;
+  font-weight:800; letter-spacing:.4px;
+}
+.th { background:rgba(239,68,68,.15);  color:#f87171; border:1px solid rgba(239,68,68,.25); }
+.tm { background:rgba(245,158,11,.1);  color:#fbbf24; border:1px solid rgba(245,158,11,.2); }
+.tl { background:rgba(59,130,246,.1);  color:#60a5fa; border:1px solid rgba(59,130,246,.2); }
+
+/* News CTA link */
+.fi-link {
+  font-size:9px; color:#2563eb; text-decoration:none; border:1px solid #1e3a5a;
+  border-radius:4px; padding:2px 7px; white-space:nowrap; transition:all .15s; font-weight:600;
+}
+.fi-link:hover { color:#93c5fd; border-color:#3b82f6; background:rgba(59,130,246,.1); }
+
+/* AI panel */
+#aip {
+  background: rgba(15,23,42,.4);
+  flex: 1; display:flex; flex-direction:column; overflow:hidden;
+}
+#aip-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px 8px; cursor:pointer; user-select:none;
+  border-bottom:1px solid #1e293b; flex-shrink:0;
+}
+#aip-header .al { font-size:11px; color:#60a5fa; font-weight:700; letter-spacing:.3px; }
+#aip-toggle { font-size:10px; color:#334155; }
+#ait-wrap {
+  padding:12px 14px 16px; font-size:11px; color:#64748b; line-height:1.75;
+  flex:1; overflow-y:auto; white-space:pre-wrap;
+}
+
+/* ── MAP OVERLAYS ── */
+#legend {
+  position:absolute; bottom:16px; left:16px; z-index:800;
+  background:rgba(2,6,23,.92);
+  backdrop-filter:blur(12px);
+  border:1px solid #1e293b;
+  border-radius:12px; padding:12px 16px;
+  box-shadow:0 4px 20px rgba(0,0,0,.6);
+}
+#legend h4 { color:#475569; margin-bottom:8px; text-transform:uppercase; letter-spacing:.6px; font-size:9px; font-weight:800; }
+.lr { display:flex; align-items:center; gap:8px; margin-bottom:6px; color:#64748b; font-size:10px; }
+.lr:last-child { margin-bottom:0; }
+.ld { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+
+#dsrc {
+  position:absolute; bottom:16px; right:16px; z-index:800;
+  background:rgba(2,6,23,.92);
+  backdrop-filter:blur(12px);
+  border:1px solid #1e293b;
+  border-radius:12px; padding:10px 14px;
+  box-shadow:0 4px 20px rgba(0,0,0,.6);
+}
+#dsrc .dt { color:#334155; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px; font-size:9px; font-weight:800; }
+.dr { display:flex; align-items:center; gap:7px; margin-bottom:5px; font-size:9px; }
+.dr:last-child { margin-bottom:0; }
+.dd { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.dr span { color:#475569; }
+
+/* ── MARKERS ── */
+/* Shared pin wrapper */
+.mk { position:relative; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+
+/* Ripple ring animation */
+@keyframes ripple {
+  0%   { transform:scale(1);   opacity:.85; }
+  70%  { transform:scale(3);   opacity:0;  }
+  100% { transform:scale(3);   opacity:0;  }
+}
+/* Blink animation for critical */
+@keyframes blink {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.3; transform:scale(.7); }
+}
+.mk-ring {
+  position:absolute; border-radius:50%;
+  animation:ripple 1.6s ease-out infinite;
+  pointer-events:none;
+}
+
+/* CRITICAL — hot pink, blinking */
+.mk-c { width:20px; height:20px; }
+.mk-c .mk-core {
+  width:12px; height:12px; border-radius:50%;
+  background:#ff2d78;
+  box-shadow:0 0 8px rgba(255,45,120,1), 0 0 18px rgba(255,45,120,.6);
+  position:relative; z-index:1;
+  animation:blink 1s ease-in-out infinite;
+}
+.mk-c .mk-ring { width:12px; height:12px; border:2px solid #ff2d78; }
+
+/* WARNING — amber, pulsing ring only */
+.mk-w { width:16px; height:16px; }
+.mk-w .mk-core {
+  width:10px; height:10px; border-radius:50%;
+  background:#ffaa00;
+  box-shadow:0 0 7px rgba(255,170,0,.9), 0 0 14px rgba(255,170,0,.4);
+  position:relative; z-index:1;
+}
+.mk-w .mk-ring { width:10px; height:10px; border:2px solid #ffaa00; animation-duration:2.2s; }
+
+/* MODERATE — cerulean dot */
+.mk-m { width:9px; height:9px; }
+.mk-m .mk-core {
+  width:9px; height:9px; border-radius:50%;
+  background:#0B6884;
+  box-shadow:0 0 5px rgba(11,104,132,.7);
+  position:relative; z-index:1;
+}
+
+/* STABLE importer — khaki dot */
+.mk-o { width:8px; height:8px; }
+.mk-o .mk-core {
+  width:8px; height:8px; border-radius:50%;
+  background:#A19A7D;
+  box-shadow:0 0 4px rgba(161,154,125,.6);
+  position:relative; z-index:1;
+}
+
+/* EXPORTER — teal dot */
+.mk-p { width:8px; height:8px; }
+.mk-p .mk-core {
+  width:8px; height:8px; border-radius:50%;
+  background:#4d9fbc;
+  box-shadow:0 0 4px rgba(77,159,188,.6);
+  position:relative; z-index:1;
+}
+
+/* ── LOADING ── */
+#loading {
+  position:absolute; top:0; left:0; right:0; bottom:0;
+  background:rgba(2,6,23,.96);
+  backdrop-filter:blur(8px);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center; z-index:2000;
+}
+.spin {
+  width:48px; height:48px;
+  border:3px solid rgba(59,130,246,.2);
+  border-top-color:#3b82f6;
+  border-radius:50%;
+  animation:spinr .7s linear infinite;
+  margin-bottom:20px;
+}
+@keyframes spinr { to{transform:rotate(360deg)} }
+#lmsg { font-size:13px; color:#3b82f6; font-weight:800; margin-bottom:6px; letter-spacing:.5px; text-transform:uppercase; }
+#lstep { font-size:10px; color:#334155; margin-bottom:16px; min-height:14px; }
+#lpbar-wrap { width:220px; height:2px; background:#1e293b; border-radius:2px; overflow:hidden; }
+#lpbar { height:100%; background:linear-gradient(90deg,#2563eb,#60a5fa); border-radius:2px; width:0%; transition:width .4s ease; }
+
+/* ── POPUP ── */
+.leaflet-popup-content-wrapper {
+  background:#0f172a; border:1px solid #1e293b; color:#e2e8f0;
+  border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.7);
+}
+.leaflet-popup-tip { background:#0f172a; }
+.pc h3 { font-size:13px; color:#93c5fd; margin-bottom:8px; font-weight:700; }
+.pr { display:flex; justify-content:space-between; font-size:10px; padding:5px 0; border-bottom:1px solid #1e293b; gap:8px; }
+.pr:last-child { border:none; }
+.pv { color:#bfdbfe; font-weight:600; text-align:right; flex-shrink:0; }
+.pb { margin-top:8px; background:#1e293b; border-radius:2px; height:3px; overflow:hidden; }
+.pbar { height:100%; border-radius:2px; }
+.pl { font-size:8px; color:#334155; margin-top:4px; }
+.ai-section { margin-top:10px; padding-top:8px; border-top:1px solid #1e293b; }
+.ai-label { font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:#3b82f6; margin-bottom:6px; }
+.ai-text { font-size:10px; color:#94a3b8; line-height:1.55; }
+.ai-loading { color:#475569; font-style:italic; }
+
+/* ── HOVER TOOLTIP ── */
+#htip {
+  position:absolute; z-index:2000; pointer-events:none;
+  background:rgba(2,6,23,.98);
+  backdrop-filter:blur(12px);
+  border:1px solid #1e293b;
+  border-radius:12px; padding:13px 16px; min-width:230px; max-width:280px;
+  box-shadow:0 8px 30px rgba(0,0,0,.8); display:none;
+  transform:translate(-50%, -105%);
+}
+#htip .ht-name { font-size:13px; font-weight:800; color:#93c5fd; margin-bottom:9px; }
+#htip .ht-row { display:flex; justify-content:space-between; font-size:10px; padding:4px 0; border-bottom:1px solid #1e293b; gap:8px; }
+#htip .ht-row:last-child { border:none; }
+#htip .ht-lbl { color:#475569; }
+#htip .ht-val { color:#bfdbfe; font-weight:700; text-align:right; flex-shrink:0; }
+#htip .ht-bar-wrap { margin-top:8px; background:#1e293b; border-radius:2px; height:3px; overflow:hidden; }
+#htip .ht-bar { height:100%; border-radius:2px; }
+#htip .ht-hint { font-size:8px; color:#334155; margin-top:4px; }
+
+/* Per-product breakdown section */
+#htip .ht-prod-section {
+  margin:7px 0 5px; padding:6px 0 4px;
+  border-top:1px solid #1e293b; border-bottom:1px solid #1e293b;
+}
+#htip .ht-prod-head {
+  font-size:8px; font-weight:800; color:#475569; text-transform:uppercase;
+  letter-spacing:.6px; margin-bottom:5px; display:flex; align-items:center; gap:6px;
+}
+#htip .ht-prod-src {
+  font-size:7px; font-weight:600; background:#0d1929; color:#3b82f6;
+  border:1px solid #1e3a5f; border-radius:3px; padding:1px 5px;
+  letter-spacing:.3px; text-transform:none;
+}
+#htip .ht-prod-row {
+  display:grid; grid-template-columns:68px 1fr 42px;
+  align-items:center; gap:5px; padding:2px 0; font-size:9px;
+}
+#htip .ht-prod-lbl { color:#64748b; white-space:nowrap; }
+#htip .ht-prod-bar-wrap { background:#0f172a; border-radius:2px; height:4px; overflow:hidden; }
+#htip .ht-prod-bar { height:100%; border-radius:2px; background:linear-gradient(90deg,#2563eb,#38bdf8); }
+#htip .ht-prod-val { color:#93c5fd; font-weight:700; text-align:right; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:3px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#1e293b; border-radius:2px; }
+::-webkit-scrollbar-thumb:hover { background:#334155; }
+
+/* ── HORMUZ SIMULATOR (header-embedded) ── */
+#hormuz-panel {
+  position:relative;
+  display:flex; flex-direction:column; justify-content:center;
+  background:rgba(239,68,68,.07);
+  border:1px solid rgba(239,68,68,.25);
+  border-radius:10px;
+  overflow:visible;
+  flex-shrink:0;
+}
+#hormuz-head {
+  display:flex; align-items:center; gap:8px; padding:0 12px;
+  height:44px; cursor:pointer; user-select:none; white-space:nowrap;
+}
+#hormuz-head .hp-label { color:#fca5a5; font-weight:800; font-size:10px; letter-spacing:.4px; text-transform:uppercase; }
+#hormuz-head .hp-toggle { font-size:8px; color:#7f3535; transition:transform .2s; }
+#hormuz-head .hp-toggle.open { transform:rotate(180deg); }
+#hormuz-body {
+  position:absolute; top:calc(100% + 6px); left:0;
+  min-width:280px;
+  background:rgba(2,6,23,.97);
+  backdrop-filter:blur(20px);
+  border:1px solid rgba(239,68,68,.3);
+  border-radius:10px;
+  box-shadow:0 8px 32px rgba(239,68,68,.18);
+  padding:12px 16px 14px;
+  display:flex; flex-direction:column; gap:8px;
+  z-index:2000;
+  max-height:120px; overflow:hidden;
+  transition:max-height .25s ease, opacity .2s ease, padding .25s ease;
+  opacity:1;
+}
+#hormuz-body.collapsed { max-height:0; padding-top:0; padding-bottom:0; opacity:0; pointer-events:none; }
+#hormuz-panel .hp-sub { color:#9b6060; font-size:8px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+/* Slider row */
+#hormuz-slider-row { display:flex; align-items:center; gap:10px; }
+#hormuz-day-lbl {
+  font-size:11px; font-weight:800; color:#fca5a5; min-width:56px;
+  white-space:nowrap; letter-spacing:.2px;
+}
+#hormuz-sel {
+  -webkit-appearance:none; appearance:none;
+  flex:1; height:4px; border-radius:2px; outline:none; cursor:pointer;
+  background: linear-gradient(to right, #ef4444 0%, #ef4444 var(--pct,0%), rgba(239,68,68,.2) var(--pct,0%), rgba(239,68,68,.2) 100%);
+  border:none;
+}
+#hormuz-sel::-webkit-slider-thumb {
+  -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+  background:#ef4444; cursor:pointer;
+  box-shadow:0 0 6px rgba(239,68,68,.8);
+}
+#hormuz-sel::-moz-range-thumb {
+  width:14px; height:14px; border-radius:50%; border:none;
+  background:#ef4444; cursor:pointer;
+  box-shadow:0 0 6px rgba(239,68,68,.8);
+}
+#hormuz-badge {
+  background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); border-radius:6px;
+  padding:3px 10px; font-size:9px; color:#f87171; font-weight:800; display:none;
+  animation:badgePulse 2s ease-in-out infinite; letter-spacing:.3px;
+}
+@keyframes badgePulse {
+  0%,100% { opacity:1; } 50% { opacity:.6; }
+}
+#hormuz-reset {
+  background:none; border:1px solid rgba(239,68,68,.2); color:#7f3030; border-radius:6px;
+  padding:5px 10px; font-size:9px; cursor:pointer; display:none; transition:all .15s;
+  font-family:inherit; font-weight:700;
+}
+#hormuz-reset:hover { border-color:#ef4444; color:#fca5a5; background:rgba(239,68,68,.1); }
+
+/* Hormuz-affected rows */
+.cr.hormuz-hit { border-left:2px solid rgba(239,68,68,.4); }
+.cr.hormuz-hit .cn2::after { content:' 🛢'; font-size:9px; }
+
+/* ── CRUDE PRICE TICKER BAR ── */
+#price-bar {
+  height:28px; background:rgba(2,6,23,.95); border-bottom:1px solid #1e293b;
+  display:flex; align-items:center; gap:0; overflow:hidden;
+  flex-shrink:0; z-index:999; position:relative;
+}
+#price-bar-inner {
+  display:flex; align-items:center; gap:24px; padding:0 18px;
+  width:100%; overflow:hidden;
+}
+.pt-sep { width:1px; height:14px; background:#1e293b; flex-shrink:0; }
+.pt-chip {
+  display:flex; align-items:center; gap:7px; white-space:nowrap; flex-shrink:0;
+}
+.pt-chip .pt-label { font-size:8.5px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.6px; }
+.pt-chip .pt-price { font-size:13px; font-weight:900; color:#f1f5f9; letter-spacing:.3px; }
+.pt-chip .pt-chg   { font-size:9px; font-weight:700; border-radius:4px; padding:1px 5px; }
+.pt-chip .pt-chg.up   { color:#4ade80; background:rgba(74,222,128,.1); }
+.pt-chip .pt-chg.dn   { color:#f87171; background:rgba(248,113,113,.1); }
+.pt-chip .pt-war  { font-size:8px; color:#64748b; }
+.pt-chip .pt-wavg { font-size:8.5px; font-weight:700; color:#fbbf24; }
+
+/* War onset line */
+.pt-war-sep {
+  display:flex; align-items:center; gap:6px; margin-left:8px;
+  font-size:8px; color:#475569; white-space:nowrap; flex-shrink:0;
+}
+.pt-war-sep::before { content:''; display:block; width:1px; height:16px; background:rgba(239,68,68,.4); }
+
+/* ── SCENARIO PREDICTION PANEL ── */
+#price-pred-panel {
+  padding:12px 14px 14px; flex-shrink:0; border-bottom:1px solid #1e293b;
+}
+#price-pred-header {
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+}
+#price-pred-header .pp-title {
+  font-size:9px; font-weight:800; color:#fbbf24; text-transform:uppercase; letter-spacing:.6px;
+  display:flex; align-items:center; gap:5px;
+}
+#price-pred-header .pp-meta { font-size:7.5px; color:#334155; }
+
+/* Scenario tabs (4 buttons) */
+#sc-tabs {
+  display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:10px;
+}
+.sc-tab {
+  padding:5px 4px; border-radius:6px; border:1.5px solid transparent;
+  background:rgba(15,23,42,.6); cursor:pointer;
+  font-size:8px; font-weight:700; text-align:center; line-height:1.3;
+  transition:background .15s, border-color .15s, opacity .15s;
+  color:#475569; display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.sc-tab .sc-num  { font-size:7px; opacity:.6; letter-spacing:.5px; }
+.sc-tab .sc-lbl  { font-size:7.5px; font-weight:800; }
+.sc-tab:hover    { opacity:1; background:rgba(30,41,59,.8); }
+.sc-tab.active   { border-color: var(--sc-color); background: rgba(30,41,59,.9); color:#f1f5f9; }
+.sc-tab.sc-1     { --sc-color:#ef4444; }
+.sc-tab.sc-2     { --sc-color:#f97316; }
+.sc-tab.sc-3     { --sc-color:#22d3ee; }
+.sc-tab.sc-4     { --sc-color:#4ade80; }
+.sc-tab.active.sc-1 .sc-lbl { color:#f87171; }
+.sc-tab.active.sc-2 .sc-lbl { color:#fb923c; }
+.sc-tab.active.sc-3 .sc-lbl { color:#22d3ee; }
+.sc-tab.active.sc-4 .sc-lbl { color:#4ade80; }
+
+/* Scenario result area */
+#sc-result {
+  background:rgba(15,23,42,.5); border-radius:8px;
+  border:1px solid #1e293b; padding:10px 11px 10px;
+  min-height:80px; position:relative;
+}
+#sc-spin {
+  display:none; width:10px; height:10px; border:2px solid rgba(251,191,36,.2);
+  border-top-color:#fbbf24; border-radius:50%; animation:spinr .7s linear infinite;
+  position:absolute; top:10px; right:10px;
+}
+#sc-scenario-badge {
+  font-size:7.5px; font-weight:800; text-transform:uppercase; letter-spacing:.5px;
+  margin-bottom:5px; display:flex; align-items:center; gap:5px;
+}
+#sc-scenario-badge::before {
+  content:''; display:inline-block; width:6px; height:6px; border-radius:50%;
+  background: var(--sc-badge-color, #fbbf24);
+}
+#sc-range {
+  font-size:15px; font-weight:900; color:#fbbf24; letter-spacing:.3px;
+  margin-bottom:7px; min-height:18px; line-height:1.2;
+}
+#sc-text {
+  font-size:9px; color:#64748b; line-height:1.7; white-space:pre-wrap;
+}
+#sc-refs { margin-top:8px; display:flex; flex-wrap:wrap; gap:3px; }
+
+/* Price sparkline (small, above range) */
+#price-spark-wrap {
+  margin:0 0 8px; height:30px; position:relative; overflow:hidden;
+}
+#price-spark { width:100%; height:30px; display:block; }
+.spark-label-left  { position:absolute; left:0;  top:0;  font-size:7px; color:#334155; }
+.spark-label-right { position:absolute; right:0; top:0;  font-size:7px; color:#334155; }
+.spark-war-line    {
+  position:absolute; top:0; bottom:0; width:1px; background:rgba(239,68,68,.5);
+  pointer-events:none;
+}
+.spark-war-lbl {
+  position:absolute; top:1px; font-size:6.5px; color:#f87171;
+  white-space:nowrap; transform:translateX(-50%);
+}
+
+/* Legacy pp- IDs (kept for the 30-day AI analysis panel below) */
+#pp-range {
+  font-size:13px; font-weight:900; color:#fbbf24; letter-spacing:.3px;
+  margin-bottom:6px; min-height:18px;
+}
+#pp-text  { font-size:9.5px; color:#64748b; line-height:1.65; white-space:pre-wrap; }
+#pp-refs  { margin-top:7px; display:flex; flex-wrap:wrap; gap:3px; }
+#pp-spin  {
+  display:inline-block; width:10px; height:10px; border:2px solid rgba(251,191,36,.2);
+  border-top-color:#fbbf24; border-radius:50%; animation:spinr .7s linear infinite;
+  margin-right:5px; vertical-align:middle;
+}
+
+/* ── BUNKER / SPR MARKERS ── */
+.bk-wrap {
+  display:flex; flex-direction:column; align-items:center; cursor:pointer;
+  filter: drop-shadow(0 0 5px rgba(250,204,21,.6));
+}
+.bk-icon {
+  width:20px; height:20px; background:rgba(250,204,21,.15);
+  border:1.5px solid rgba(250,204,21,.6); border-radius:4px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; line-height:1;
+  transition: background .2s;
+}
+.bk-wrap:hover .bk-icon { background:rgba(250,204,21,.35); }
+.bk-stem {
+  width:2px; height:5px;
+  background:rgba(250,204,21,.5);
+}
+.bk-dot {
+  width:4px; height:4px; border-radius:50%;
+  background:#facc15;
+}
+/* Popup for bunkers */
+.bunker-popup h3 { font-size:12px; color:#facc15; margin-bottom:7px; font-weight:700; }
+.bunker-popup .bp { display:flex; justify-content:space-between; font-size:9px; padding:4px 0; border-bottom:1px solid #1e293b; gap:8px; }
+.bunker-popup .bp:last-child { border:none; }
+.bunker-popup .bpv { color:#fef9c3; font-weight:600; text-align:right; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<!-- ── CRUDE PRICE TICKER BAR ── -->
+<div id="price-bar">
+  <div id="price-bar-inner">
+    <div class="pt-chip">
+      <span class="pt-label">WTI</span>
+      <span class="pt-price" id="pb-wti-price">—</span>
+      <span class="pt-chg" id="pb-wti-chg">—</span>
+      <span class="pt-wavg" id="pb-wti-wavg" title="Weighted daily avg since Feb 28 2026 (de-escalation days down-weighted)"></span>
+    </div>
+    <div class="pt-sep"></div>
+    <div class="pt-chip">
+      <span class="pt-label">Brent</span>
+      <span class="pt-price" id="pb-brent-price">—</span>
+      <span class="pt-chg" id="pb-brent-chg">—</span>
+    </div>
+    <div class="pt-sep"></div>
+    <div class="pt-war-sep">
+      <span id="pb-war-chg" style="color:#fca5a5;font-weight:800;font-size:9px;">Since Feb 28:</span>
+      <span id="pb-war-pct" style="font-weight:700;font-size:9px;">—</span>
+    </div>
+    <div class="pt-sep"></div>
+    <span style="font-size:8px;color:#334155;flex:1;text-align:right;" id="pb-updated">Refreshes hourly · EIA spot prices</span>
+  </div>
+</div>
+
+<div id="header">
+  <div id="header-brand">
+    <div id="brand-icon">🛡️</div>
+    <div id="brand-text">
+      <h1>Oil Sentinel <span id="brand-tag">PRO</span></h1>
+      <div class="sub">Real-time Global Energy Intelligence</div>
+    </div>
+  </div>
+  <div id="stats">
+    <div class="sb green" ><div class="v" id="g-inv">—</div><div class="l">Global Fuel Inventory</div></div>
+    <div class="sb"       ><div class="v" id="g-use">—</div><div class="l">Global Daily Usage</div></div>
+    <div class="sb amber hormuz-dynamic" id="g-prod-chip"><div class="v" id="g-prod">—</div><div class="l">Global Daily Production</div></div>
+    <div class="sb cyan"  ><div class="v" id="g-flt">—</div><div class="l">Floating Tankers &amp; Depots</div></div>
+    <div class="sb red"   ><div class="v" id="g-cri">—</div><div class="l">Critical Risk Zones</div></div>
+    <div class="sb"       ><div class="v" id="g-sig">—</div><div class="l">Live Signals (3d)</div></div>
+  </div>
+  <!-- Hormuz Closure Simulator — nestled in header -->
+  <div id="hormuz-panel">
+    <div id="hormuz-head" onclick="toggleHormuz()">
+      <div class="hp-label">⚠ Hormuz Closure Simulator</div>
+      <div id="hormuz-badge">ACTIVE</div>
+      <span id="hp-toggle-icon" class="hp-toggle">▼</span>
+    </div>
+    <div id="hormuz-body" class="collapsed">
+      <div class="hp-sub">~21% of global oil transits this chokepoint daily</div>
+      <div id="hormuz-slider-row">
+        <input id="hormuz-sel" type="range" min="5" max="30" step="1" value="5"
+               oninput="applyHormuzClosure()" style="--pct:0%">
+        <span id="hormuz-day-lbl">5 days</span>
+        <button id="hormuz-reset" onclick="resetHormuzClosure()">✕ Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="rinfo">
+    <span class="ts" id="ts">Connecting…</span>
+    <span id="nxt"></span>
+    <button id="rbtn" onclick="fullRefresh()">↺ Sync</button>
+  </div>
+</div>
+
+<div id="layout">
+
+  <!-- ── LEFT SIDEBAR ── -->
+  <div id="sb-wrap">
+    <div id="sb-tabs">
+      <div class="sbt active" onclick="showTab('risk')" id="tab-risk">Risk List</div>
+      <div class="sbt" onclick="showTab('signals')" id="tab-signals">Signals</div>
+      <div class="sbt" onclick="showTab('analysis')" id="tab-analysis">Analysis</div>
+    </div>
+
+    <!-- Tab: Risk -->
+    <div id="panel-risk" class="sb-panel active">
+      <div class="pt">
+        <span>🛢 US Inventory · EIA Live</span>
+      </div>
+      <div id="eia-rows"></div>
+      <div class="pt">
+        <span>Country Risk Ranking</span>
+        <span class="pt-badge" id="crit-badge">— critical</span>
+      </div>
+      <div id="search-wrap">
+        <input id="csearch" type="text" placeholder="Search markets…" autocomplete="off" oninput="onCountrySearch(this.value)" onblur="setTimeout(()=>hideSuggest(),180)"/>
+        <div id="search-suggest"></div>
+      </div>
+      <div id="clist"></div>
+    </div>
+
+    <!-- Tab: Signals -->
+    <div id="panel-signals" class="sb-panel">
+      <div class="pt">
+        <span>Geopolitical Signals</span>
+        <span class="pt-badge warn" id="sig-badge">— signals (3 days)</span>
+      </div>
+      <div id="feed"></div>
+    </div>
+
+    <!-- Tab: Analysis -->
+    <div id="panel-analysis" class="sb-panel">
+
+      <!-- ── CRUDE OIL SCENARIO PRICE PREDICTION ── -->
+      <div id="price-pred-panel">
+        <div id="price-pred-header">
+          <span class="pp-title">📊 Brent Crude · 7-Day Scenario Outlook <span id="sc-spin"></span></span>
+          <span class="pp-meta" id="pp-updated">ICE Brent · EIA · GPT-4o Search</span>
+        </div>
+
+        <!-- Sparkline — historical WTI since war -->
+        <div id="price-spark-wrap">
+          <svg id="price-spark" viewBox="0 0 300 30" preserveAspectRatio="none"></svg>
+          <span class="spark-label-left" id="spark-lo"></span>
+          <span class="spark-label-right" id="spark-hi"></span>
+        </div>
+
+        <!-- 4 scenario selector tabs -->
+        <div id="sc-tabs">
+          <div class="sc-tab sc-1 active" onclick="selectScenario(1)">
+            <span class="sc-num">SCENARIO 1</span>
+            <span class="sc-lbl">🔴 Full Escalation</span>
+          </div>
+          <div class="sc-tab sc-2" onclick="selectScenario(2)">
+            <span class="sc-num">SCENARIO 2</span>
+            <span class="sc-lbl">🟠 Status Quo</span>
+          </div>
+          <div class="sc-tab sc-3" onclick="selectScenario(3)">
+            <span class="sc-num">SCENARIO 3</span>
+            <span class="sc-lbl">🔵 Ceasefire</span>
+          </div>
+          <div class="sc-tab sc-4" onclick="selectScenario(4)">
+            <span class="sc-num">SCENARIO 4</span>
+            <span class="sc-lbl">🟢 Full Relief</span>
+          </div>
+        </div>
+
+        <!-- Result area -->
+        <div id="sc-result">
+          <div id="sc-spin"></div>
+          <div id="sc-scenario-badge" style="color:#475569;">Select a scenario above</div>
+          <div id="sc-range" style="color:#475569;font-size:11px;">— Brent $/bbl (7-day)</div>
+          <div id="sc-text" style="color:#334155;font-size:8.5px;">Click a scenario tab to run Brent price AI analysis…</div>
+          <div id="sc-refs"></div>
+        </div>
+      </div>
+
+      <!-- ── 30-DAY AI PRICE OUTLOOK ── -->
+      <div id="price-pred-panel-30d" style="padding:10px 14px 12px;border-bottom:1px solid #1e293b;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;">
+          <span style="font-size:9px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:.6px;display:flex;align-items:center;gap:4px;">
+            📈 30-Day WTI Consensus <span id="pp-spin" style="display:none"></span>
+          </span>
+          <span style="font-size:7.5px;color:#334155;" id="pp-updated-30d">EIA + top 10 news · GPT-4o</span>
+        </div>
+        <div id="pp-range">—</div>
+        <div id="pp-text">Loading…</div>
+        <div id="pp-refs"></div>
+      </div>
+
+      <div id="aip">
+        <div id="aip-header">
+          <span class="al">🤖 AI Market Sentiment</span>
+          <span style="font-size:9px;color:#334155;">Updated on sync</span>
+        </div>
+        <div id="ait-wrap">
+          <div id="ait">Connecting to global feeds…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAP ── -->
+  <div id="map-wrap">
+    <div id="loading">
+      <div class="spin"></div>
+      <div id="lmsg">Connecting to global feeds…</div>
+      <div id="lstep"></div>
+      <div id="lpbar-wrap"><div id="lpbar"></div></div>
+    </div>
+    <div id="map"></div>
+    <div id="htip"></div>
+
+    <!-- Hormuz panel moved to header -->
+
+    <div id="legend">
+      <h4>Days of Supply Remaining</h4>
+      <div class="lr"><div class="ld" style="background:#ff2d78;box-shadow:0 0 6px rgba(255,45,120,.8)"></div>Critical &lt;14 days — blinking</div>
+      <div class="lr"><div class="ld" style="background:#ffaa00;box-shadow:0 0 5px rgba(255,170,0,.7)"></div>Warning 14–45 days</div>
+      <div class="lr"><div class="ld" style="background:#0B6884;width:9px;height:9px;border-radius:50%"></div>Moderate 45–90 days</div>
+      <div class="lr"><div class="ld" style="background:#A19A7D;width:8px;height:8px;border-radius:50%"></div>Stable &gt;90 days</div>
+      <div class="lr"><div class="ld" style="background:#4d9fbc;width:8px;height:8px;border-radius:50%"></div>Net Exporter</div>
+      <div class="lr"><div class="ld" style="background:#1e3a5a"></div>No data available</div>
+      <div style="border-top:1px solid #1e293b;margin:6px 0 4px;padding-top:6px;font-size:8px;color:#475569;font-weight:800;letter-spacing:.5px;text-transform:uppercase;">Inventory Facilities</div>
+      <div class="lr"><span style="font-size:11px;line-height:1;margin-right:2px">🏛</span><span style="color:#facc15">SPR — Strategic Petroleum Reserve</span></div>
+      <div class="lr"><span style="font-size:11px;line-height:1;margin-right:2px">⚓</span><span style="color:#22d3ee">Transit Hub / Floating Depot</span></div>
+      <div class="lr"><span style="font-size:11px;line-height:1;margin-right:2px">🏭</span><span style="color:#a78bfa">Commercial Storage Hub</span></div>
+    </div>
+
+    <div id="dsrc">
+      <div class="dt">3 Sources Connected</div>
+      <div class="dr"><div class="dd" style="background:#0B6884"></div><span>EIA — US weekly stocks</span></div>
+      <div class="dr"><div class="dd" style="background:#A19A7D"></div><span>World Bank — consumption</span></div>
+      <div class="dr"><div class="dd" style="background:#6C4B5E"></div><span>GDELT — geopolitical signals</span></div>
+      <div class="dr"><div class="dd" style="background:#B3679B"></div><span>NewsAPI — headlines</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── FOOTER ── -->
+<div id="footer" style="height:36px;flex-shrink:0;border-top:1px solid #1e293b;background:rgba(15,23,42,.8);display:flex;align-items:center;justify-content:space-between;padding:0 18px;z-index:900;">
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div style="width:7px;height:7px;border-radius:50%;background:#A19A7D;box-shadow:0 0 6px rgba(161,154,125,.5);"></div>
+      <span style="font-size:9px;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">System Online</span>
+    </div>
+    <div style="width:1px;height:14px;background:#1e293b;"></div>
+    <span style="font-size:9px;color:#334155;font-weight:500;" id="footer-ts">Last sync: —</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:20px;font-size:9px;color:#334155;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">
+    <span>EIA · World Bank · GDELT · NewsAPI</span>
+    <span style="color:#1e293b;">|</span>
+    <span style="color:#475569;">Oil Sentinel v2.0</span>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────────
+// Change BACKEND to your Railway URL when deploying, e.g.:
+// const BACKEND = "https://your-app.up.railway.app";
+const BACKEND    = "http://localhost:5001";
+const USE_BACKEND = true;
+
+// ─────────────────────────────────────────────
+// COUNTRY DATA TABLE  (corrected model)
+// Sources: IEA Oil Market Report 2024, EIA International,
+//          BP Statistical Review 2024, JODI Oil World Database
+//
+// Columns per country:
+//   [0] stocks_mb        Operational stocks (Mb) = commercial + SPR + pipeline
+//                        NOT proven geological reserves.
+//                        For IEA members this is ~90-day mandatory stock.
+//   [1] consumption_kbd  Total petroleum consumption (kbd)
+//   [2] production_kbd   Domestic crude + NGL production (kbd)
+//                        Net importers: production < consumption
+//                        Net exporters: production >= consumption → days always large
+//   [3] imports_kbd      Avg scheduled crude + product imports (kbd)
+//   [4] flag
+//   [5] producer         true = net exporter
+//   [6] lat
+//   [7] lng
+//   [8] name
+//   [9] nearest_spr      Nearest strategic reserve / hub description
+//
+// Days formula (emergency runway — if all imports stopped):
+//   gap = consumption - production  [kbd]
+//   If gap <= 0 (net exporter): days = 999 (green)
+//   Else: days = stocks_mb * 1000 / gap
+//   imports_kbd shown in popup as import dependency % context only
+// ─────────────────────────────────────────────
+const CTABLE = {
+// iso3 : [stocks_mb, cons_kbd, prod_kbd, imp_kbd,  flag,  prod?,   lat,    lng,  name,                      nearest_spr]
+// stocks_mb = crude + refined products + NGL in storage (total petroleum inventory)
+  USA:  [ 1650,  20100,  13200,   6900, "🇺🇸", true,  38.9,  -97.0, "United States",     "SPR: Bryan Mound, Big Hill, West Hackberry (727Mb) + ~900Mb commercial crude+products"],
+  CHN:  [ 1200,  16300,   4200,  11000, "🇨🇳", false, 35.0,  105.0, "China",             "SPR: Zhoushan, Zhenhai, Lanzhou (503Mb) + ~700Mb commercial+refinery stocks"],
+  IND:  [  102,   5300,    750,   4800, "🇮🇳", false, 22.0,   80.0, "India",             "SPR: Visakhapatnam, Mangaluru, Padur (37Mb) + ~65Mb refinery+product stocks"],
+  JPN:  [  600,   3100,     10,   3100, "🇯🇵", false, 36.2,  138.0, "Japan",             "SPR: Kikuma, Kushikino, Shibushi (324Mb govt + 206Mb industry) + ~70Mb products"],
+  KOR:  [  260,   2700,      5,   2700, "🇰🇷", false, 36.5,  128.0, "South Korea",       "SPR: Ulsan, Yeosu, Geoje (146Mb) + ~114Mb commercial+product stocks"],
+  DEU:  [   90,   2200,     60,   2200, "🇩🇪", false, 51.2,   10.4, "Germany",           "EBV Reserves: Hamburg, Wilhelmshaven + ~38Mb refined products (total ~90Mb)"],
+  FRA:  [   80,   1700,     20,   1700, "🇫🇷", false, 46.2,    2.2, "France",            "SAGESS strategic stocks + ~35Mb refined products (total ~80Mb)"],
+  SAU:  [  500,   3700,  12000,      0, "🇸🇦", true,  24.0,   45.0, "Saudi Arabia",      "Aramco: Abqaiq, Ras Tanura, Yanbu + domestic refined product storage (~500Mb)"],
+  RUS:  [  280,   3700,  10500,      0, "🇷🇺", true,  61.0,   90.0, "Russia",            "Transneft: Samara, Primorsk + ~150Mb refined products in pipeline system"],
+  ARE:  [  250,   1100,   4000,      0, "🇦🇪", true,  24.5,   54.4, "UAE",               "ADNOC: Ruwais, Fujairah strategic hub + ~50Mb products (total ~250Mb)"],
+  IRN:  [  200,   2100,   3200,      0, "🇮🇷", true,  32.0,   53.7, "Iran",              "NIOC: Kharg Island, Assaluyeh + ~50Mb floating+onshore refined stocks"],
+  IRQ:  [  130,    880,   4400,      0, "🇮🇶", true,  33.2,   43.7, "Iraq",              "SOMO: Basra, Kirkuk + ~30Mb refined product reserves"],
+  KWT:  [  130,    470,   2700,      0, "🇰🇼", true,  29.3,   47.5, "Kuwait",            "KPC: Mina Al-Ahmadi + ~20Mb refined stocks (total ~130Mb)"],
+  CAN:  [  350,   2400,   5700,      0, "🇨🇦", true,  56.1, -106.3, "Canada",            "Hardisty Hub, Edmonton + ~140Mb refined+pipeline linepack"],
+  BRA:  [  150,   3300,   3700,    500, "🇧🇷", true, -14.2,  -51.9, "Brazil",            "Petrobras: Santos Basin + ~55Mb refined products at refineries"],
+  MEX:  [   65,   1900,   1900,    400, "🇲🇽", true,  23.6, -102.6, "Mexico",            "PEMEX: Salina Cruz, Tuxpan + ~30Mb refined product storage"],
+  GBR:  [   55,   1500,    800,    900, "🇬🇧", false, 55.4,   -3.4, "United Kingdom",    "UKSC mandatory stocks + ~29Mb refined products (total ~55Mb)"],
+  ESP:  [   65,   1300,     30,   1300, "🇪🇸", false, 40.5,   -3.7, "Spain",             "CORES reserves + ~29Mb refined products (total ~65Mb)"],
+  ITA:  [   62,   1300,     80,   1250, "🇮🇹", false, 42.8,   12.6, "Italy",             "GSE reserves: Trieste, Genova + ~29Mb refined products (total ~62Mb)"],
+  NLD:  [   95,    900,     40,   1600, "🇳🇱", false, 52.1,    5.3, "Netherlands",       "COVA: Rotterdam ARA hub + ~47Mb refined transit stocks (total ~95Mb)"],
+  TUR:  [   42,   1000,     70,    970, "🇹🇷", false, 38.9,   35.2, "Turkey",            "TPAO: Ceyhan, Aliaga + ~22Mb refined product stocks (total ~42Mb)"],
+  SGP:  [   80,   1600,      0,   1600, "🇸🇬", false,  1.35, 103.8, "Singapore",         "JTC: Jurong Island + ~35Mb refined/bunker product stocks (total ~80Mb)"],
+  AUS:  [   40,   1060,    430,    700, "🇦🇺", false,-25.3,  133.8, "Australia",         "IEA-linked: Lytton, Kwinana + ~21Mb refined products (total ~40Mb)"],
+  POL:  [   48,    570,     20,    570, "🇵🇱", false, 51.9,   19.1, "Poland",            "PERN: Plock, Gdansk + ~23Mb refined products (total ~48Mb)"],
+  UKR:  [   12,    280,     80,    220, "🇺🇦", false, 49.0,   31.2, "Ukraine",           "Ukrtransnafta: Brody + ~4Mb refined products (wartime reduced, total ~12Mb)"],
+  NGA:  [   65,    530,   1500,      0, "🇳🇬", true,   9.1,    8.7, "Nigeria",           "NNPC: Bonny, Forcados + ~15Mb Dangote refinery buffer (total ~65Mb)"],
+  LBY:  [   45,    350,   1200,      0, "🇱🇾", true,  26.3,   17.2, "Libya",             "NOC: Es Sider, Ras Lanuf + ~10Mb refined stocks (total ~45Mb)"],
+  DZA:  [   50,    540,   1300,      0, "🇩🇿", true,  28.0,    1.7, "Algeria",           "Sonatrach: Skikda, Arzew + ~20Mb refined product stocks (total ~50Mb)"],
+  VEN:  [   28,    580,    900,      0, "🇻🇪", true,   8.0,  -66.6, "Venezuela",         "PDVSA: Jose complex + ~8Mb degraded refined stocks (total ~28Mb)"],
+  KAZ:  [   70,    360,   1900,      0, "🇰🇿", true,  48.0,   68.0, "Kazakhstan",        "KazTransOil: Tengiz, Kashagan + ~15Mb refined stocks (total ~70Mb)"],
+  NOR:  [   45,    220,   2000,      0, "🇳🇴", true,  64.5,   17.9, "Norway",            "Mongstad, Sture + ~15Mb refined products (total ~45Mb)"],
+  QAT:  [   85,    280,   1900,      0, "🇶🇦", true,  25.4,   51.2, "Qatar",             "QatarEnergy: Ras Laffan + ~15Mb condensate+refined stocks (total ~85Mb)"],
+  OMN:  [   30,    200,   1100,      0, "🇴🇲", true,  21.5,   57.5, "Oman",              "OQ: Mina Al-Fahal + ~8Mb refined products (total ~30Mb)"],
+  AZE:  [   28,    110,    700,      0, "🇦🇿", true,  40.4,   47.8, "Azerbaijan",        "SOCAR: Sangachal + ~6Mb refined stocks (total ~28Mb)"],
+  ECU:  [   18,    230,    490,      0, "🇪🇨", true,  -1.8,  -78.2, "Ecuador",           "Petroecuador: Esmeraldas + ~4Mb refined stocks (total ~18Mb)"],
+  COL:  [   20,    360,    760,      0, "🇨🇴", true,   4.0,  -72.0, "Colombia",          "Ecopetrol: Cartagena, Barrancabermeja + ~6Mb refined stocks (total ~20Mb)"],
+  MYS:  [   42,    820,    570,    350, "🇲🇾", true,   4.2,  109.5, "Malaysia",          "Petronas: Melaka, Kerteh + ~14Mb refined product stocks (total ~42Mb)"],
+  PAK:  [   16,    560,     80,    490, "🇵🇰", false, 30.4,   69.3, "Pakistan",          "PSO: Karachi, Port Qasim + ~7Mb refined products (total ~16Mb)"],
+  BGD:  [    8,    350,     10,    340, "🇧🇩", false, 23.7,   90.4, "Bangladesh",        "BPC: Chittagong + ~3Mb refined product stocks (total ~8Mb)"],
+  EGY:  [   45,    840,    560,    350, "🇪🇬", false, 26.8,   30.8, "Egypt",             "EGPC: Suez, Alexandria + ~17Mb refined product stocks (total ~45Mb)"],
+  THA:  [   45,   1400,    370,   1100, "🇹🇭", false, 15.9,  100.9, "Thailand",          "PTT: Map Ta Phut, Sriracha + ~20Mb refined products (total ~45Mb)"],
+  IDN:  [   42,   1700,    600,   1200, "🇮🇩", false, -0.8,  113.9, "Indonesia",         "Pertamina: Cilacap, Balikpapan + ~18Mb refined stocks (total ~42Mb)"],
+  ZAF:  [   28,    620,     10,    630, "🇿🇦", false,-30.6,   22.9, "South Africa",      "SFF: Milnerton + ~11Mb refined product stocks (total ~28Mb)"],
+  ARG:  [   32,    700,    650,    100, "🇦🇷", true, -38.0,  -63.6, "Argentina",         "YPF: La Plata, Lujan de Cuyo + ~12Mb refined stocks (total ~32Mb)"],
+  MAR:  [    9,    280,     10,    280, "🇲🇦", false, 31.8,   -7.1, "Morocco",           "SAMIR: Mohammedia + ~4Mb refined products (total ~9Mb)"],
+  LKA:  [    3,    130,      0,    130, "🇱🇰", false,  7.9,   80.7, "Sri Lanka",         "CPC: Colombo + ~1Mb refined products (total ~3Mb)"],
+  LBN:  [    2,    100,      0,    100, "🇱🇧", false, 33.9,   35.5, "Lebanon",           "Tripoli, Zahrani + ~1Mb refined products (total ~2Mb, state collapse)"],
+  YEM:  [    3,     90,     30,     70, "🇾🇪", false, 15.6,   48.5, "Yemen",             "Aden refinery (damaged) + ~1Mb residual stocks (total ~3Mb, conflict zone)"],
+  MMR:  [    6,    100,     15,     90, "🇲🇲", false, 19.2,   96.7, "Myanmar",           "MPC: Thanlyin + ~2Mb refined products (total ~6Mb, junta controls)"],
+  CUB:  [    5,    130,     50,     90, "🇨🇺", false, 22.0,  -79.5, "Cuba",              "CUPET: Matanzas + ~2Mb refined stocks (total ~5Mb, embargo constrained)"],
+  PER:  [   10,    270,    120,    160, "🇵🇪", false, -9.2,  -75.0, "Peru",              "Petroperu: Talara + ~4Mb refined product stocks (total ~10Mb)"],
+  GHA:  [    9,    100,    150,      0, "🇬🇭", true,   7.9,   -1.0, "Ghana",             "GNPC: Tema + ~3Mb refined stocks (total ~9Mb, near self-sufficient)"],
+  SDN:  [    7,    120,    100,     30, "🇸🇩", false, 12.9,   30.2, "Sudan",             "Khartoum refinery + ~2Mb refined stocks (total ~7Mb, conflict disrupted)"],
+  BHR:  [    8,    200,     60,    150, "🇧🇭", false, 26.1,   50.6, "Bahrain",           "BAPCO: Sitra + ~3Mb refined stocks (total ~8Mb, Saudi pipeline connected)"],
+  TKM:  [   18,    100,    600,      0, "🇹🇲", true,  40.0,   60.0, "Turkmenistan",      "Turkmenneft: Turkmenbashi + ~4Mb refined stocks (total ~18Mb)"],
+  GTM:  [    3,     90,     10,     85, "🇬🇹", false, 15.8,  -90.2, "Guatemala",         "Texaco: Puerto Quetzal + ~1Mb refined stocks (total ~3Mb)"],
+  BOL:  [    5,     90,     70,     30, "🇧🇴", false,-16.3,  -63.6, "Bolivia",           "YPFB: Cochabamba + ~2Mb refined stocks (total ~5Mb, landlocked)"],
+};
+
+// ─────────────────────────────────────────────
+// STRAIT OF HORMUZ EXPOSURE
+// How much of each country's oil imports transit Hormuz (kbd).
+// Sources: EIA Strait of Hormuz factsheet, IEA World Energy Outlook.
+// ~21 Mb/d total flows through Hormuz.
+// Countries that are major EXPORTERS through Hormuz are flagged too —
+// closure cuts their export revenue but domestic supply is unaffected.
+// ─────────────────────────────────────────────
+const HORMUZ_EXPOSURE = {
+  // [kbd through Hormuz, role: 'importer'|'exporter'|'both']
+  JPN:  [3050, 'importer'],   // ~90% of Japan's crude via Hormuz
+  KOR:  [2600, 'importer'],   // ~70% of S.Korea crude via Hormuz
+  CHN:  [3500, 'importer'],   // ~40% of China crude via Hormuz
+  IND:  [1800, 'importer'],   // ~60% of India crude via Hormuz
+  SGP:  [1400, 'importer'],   // major re-exporter, 85% sourced via Hormuz
+  THA:  [900,  'importer'],
+  IDN:  [600,  'importer'],
+  MYS:  [400,  'importer'],
+  TUR:  [600,  'importer'],
+  GBR:  [200,  'importer'],
+  DEU:  [250,  'importer'],
+  ITA:  [300,  'importer'],
+  ESP:  [220,  'importer'],
+  FRA:  [180,  'importer'],
+  NLD:  [350,  'importer'],   // Rotterdam ARA hub
+  USA:  [500,  'importer'],   // small % but still flows
+  AUS:  [180,  'importer'],
+  EGY:  [200,  'importer'],
+  PAK:  [450,  'importer'],
+  BGD:  [300,  'importer'],
+  // Exporters through Hormuz
+  SAU:  [7000, 'exporter'],   // largest single flow
+  ARE:  [2500, 'exporter'],
+  KWT:  [1800, 'exporter'],
+  IRQ:  [3500, 'exporter'],
+  QAT:  [1200, 'exporter'],
+  IRN:  [1400, 'exporter'],   // when not fully sanctioned
+  BHR:  [200,  'exporter'],
+};
+
+// Snapshot of original stocks before any simulation
+let _origStocks = {};  // iso3 -> {stocks_mb, days}
+let _hormuzDays = 0;   // currently simulated closure days
+let _allNewsHeadlines = [];   // all fetched headlines (GDELT + NewsAPI) for AI context
+let _productStocks = {};      // iso3 -> { crude, gasoline, diesel, jet, fuel_oil, lpg_naphtha, source }
+
+// ─────────────────────────────────────────────
+// COMPUTE DAYS OF SUPPLY (correct formula)
+//
+// Emergency runway = how long stocks last if all imports stopped.
+// gap = consumption - domestic_production [kbd]
+// If gap <= 0: net exporter → days = 999 (green)
+// Else: days = stocks_mb * 1000 / gap
+// ─────────────────────────────────────────────
+function computeDays(stocks_mb, cons_kbd, prod_kbd, imp_kbd) {
+  // Emergency runway: how long stocks last if ALL imports stopped.
+  // gap = domestic shortfall (consumption minus own production).
+  // imports_kbd shown in popup for context but NOT subtracted here —
+  // scheduled imports are not stocks on hand.
+  const gap = cons_kbd - prod_kbd;
+  if (gap <= 0) return 999; // net exporter — produces more than it needs
+  return Math.min(998, Math.round((stocks_mb * 1000) / gap));
+}
+
+// Build COUNTRIES array
+const COUNTRIES = Object.entries(CTABLE).map(([iso3, v]) => ({
+  iso3,
+  name:        v[8],
+  stocks_mb:   v[0],   // operational stocks
+  consumption_kbd: v[1],
+  production_kbd:  v[2],
+  imports_kbd:     v[3],
+  flag:        v[4],
+  producer:    v[5],
+  lat:         v[6],
+  lng:         v[7],
+  nearest_spr: v[9],
+  days: computeDays(v[0], v[1], v[2], v[3]),
+  _wb_updated: false,
+  _eia_live:   false,
+}));
+
+// iso2 map for World Bank calls
+const ISO3_TO_ISO2 = {
+  USA:"US",SAU:"SA",RUS:"RU",CHN:"CN",IND:"IN",JPN:"JP",DEU:"DE",KOR:"KR",
+  BRA:"BR",ARE:"AE",IRN:"IR",IRQ:"IQ",KWT:"KW",GBR:"GB",FRA:"FR",ESP:"ES",
+  ITA:"IT",TUR:"TR",PAK:"PK",BGD:"BD",EGY:"EG",THA:"TH",SGP:"SG",NLD:"NL",
+  VEN:"VE",CAN:"CA",MEX:"MX",NGA:"NG",LBY:"LY",DZA:"DZ",LKA:"LK",LBN:"LB",
+  YEM:"YE",MMR:"MM",CUB:"CU",ARG:"AR",IDN:"ID",MYS:"MY",KAZ:"KZ",NOR:"NO",
+  POL:"PL",UKR:"UA",AUS:"AU",ZAF:"ZA",MAR:"MA",COL:"CO",PER:"PE",GTM:"GT",
+  GHA:"GH",SDN:"SD",QAT:"QA",OMN:"OM",BHR:"BH",TKM:"TM",AZE:"AZ",ECU:"EC",
+  BOL:"BO"
+};
+const ISO2_TO_ISO3 = Object.fromEntries(Object.entries(ISO3_TO_ISO2).map(([a,b])=>[b,a]));
+
+const POP_M = {
+  US:332,SA:36,RU:144,CN:1412,IN:1407,JP:125,DE:83,KR:52,BR:215,
+  AE:10,IR:87,IQ:41,KW:4.4,GB:67,FR:68,ES:47,IT:60,TR:85,PK:231,
+  BD:171,EG:105,TH:70,SG:5.9,NL:17.9,VE:29,CA:38,MX:130,NG:220,
+  LY:7,DZ:46,LK:22,LB:5.4,YE:34,MM:55,CU:11,AR:46,ID:274,MY:33,KZ:19,NO:5.4,
+  PL:38,UA:44,AU:26,ZA:60,MA:37,CO:51,PE:33,GT:18,GH:33,SD:46,
+  QA:2.9,OM:5,BH:1.7,TM:6,AZ:10,EC:18,BO:12
+};
+
+// ─────────────────────────────────────────────
+// MAP SETUP
+// ─────────────────────────────────────────────
+const map = L.map('map', {
+  center:[20,15], zoom:3, minZoom:2, maxZoom:10,
+  worldCopyJump:false, zoomControl:true
+});
+
+// Dark navy base — no labels so we draw our own country names
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains:'abcd', maxZoom:19
+}).addTo(map);
+
+// ─────────────────────────────────────────────
+// COLOR SCALE
+// ─────────────────────────────────────────────
+function daysToColor(days) {
+  // No fill — transparent overlay, markers carry the color
+  return { fill:'#1a2e42', opacity:0.18 };
+}
+function daysClass(days) {
+  if (days >= 999) return 'do';   // net exporter — always green
+  if (days < 14)   return 'dc';
+  if (days < 45)   return 'dw';
+  if (days < 90)   return 'dy';
+  return 'do';
+}
+function daysCol(days) {
+  if (days >= 999) return '#4ade80';
+  if (days < 14)   return '#f87171';
+  if (days < 45)   return '#fbbf24';
+  if (days < 90)   return '#eab308';
+  return '#4ade80';
+}
+
+// ─────────────────────────────────────────────
+// GEOJSON CHOROPLETH
+// Using Natural Earth 110m via CDN (no auth)
+// ─────────────────────────────────────────────
+let choroplethLayer = null;
+const sirenMarkers = {};
+
+function getCountryData(iso3upper) {
+  return COUNTRIES.find(c => c.iso3 === iso3upper) || null;
+}
+
+async function loadChoropleth() {
+  setStep('Loading country borders (Natural Earth)…');
+  const url = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
+  let geojson;
+  try {
+    const r = await fetch(url, {signal:AbortSignal.timeout(15000)});
+    geojson = await r.json();
+  } catch(e) {
+    console.warn('GeoJSON failed:', e);
+    return;
+  }
+
+  if (choroplethLayer) map.removeLayer(choroplethLayer);
+
+  // Large countries (by approximate area rank) get bolder borders + name labels
+  const LARGE_COUNTRIES = new Set([
+    'RUS','CAN','USA','CHN','BRA','AUS','IND','ARG','KAZ','DZA','COD','SAU',
+    'MEX','IDN','SDN','LBY','IRN','MNG','PER','TCD','NER','ANG','MLI','ZAF',
+    'COL','ETH','BOL','MRT','EGY','TZA','NGA','VEN','NAM','MOZ','PAK','TUR',
+    'CHL','ZMB','MAR','MMR','AFG','SOM','CAF','UKR','MDG','BWA','KEN','YEM',
+    'FRA','DEU','POL','SWE','NOR','FIN','IRQ','SYR','SAU','IND','BGD'
+  ]);
+
+  choroplethLayer = L.geoJSON(geojson, {
+    style: feature => {
+      const iso3 = (feature.properties.ISO_A3_EH || feature.properties.ADM0_ISO || feature.properties.ADM0_A3 || '').toUpperCase();
+      const isLarge = LARGE_COUNTRIES.has(iso3);
+      return {
+        fillColor: '#1a2e42',
+        fillOpacity: 0.15,
+        color: '#4d9fbc',
+        weight: isLarge ? 1.6 : 0.9,
+        opacity: isLarge ? 0.9 : 0.6,
+      };
+    },
+    onEachFeature: (feature, layer) => {
+      const iso3 = (feature.properties.ISO_A3_EH || feature.properties.ADM0_ISO || feature.properties.ADM0_A3 || '').toUpperCase();
+      const cd = getCountryData(iso3);
+      const countryName = feature.properties.NAME || feature.properties.ADMIN || feature.properties.NAME_EN || iso3;
+      const isLarge = LARGE_COUNTRIES.has(iso3);
+
+      // Add country name label for larger countries
+      if (isLarge && countryName) {
+        const bounds = layer.getBounds();
+        const center = bounds.getCenter();
+        L.marker(center, {
+          icon: L.divIcon({
+            className: 'country-label',
+            html: countryName,
+            iconAnchor: [0, 0],
+          }),
+          interactive: false,
+          zIndexOffset: -500,
+        }).addTo(map);
+      }
+
+      layer.on('mouseover', function() {
+        this.setStyle({ fillOpacity:0.35, weight: LARGE_COUNTRIES.has(iso3) ? 2.5 : 1.6, color:'#7ecfed' });
+        if (cd) this.bringToFront();
+      });
+      layer.on('mouseout', function() {
+        if (choroplethLayer) choroplethLayer.resetStyle(this);
+      });
+    }
+  }).addTo(map);
+
+  renderSirenMarkers();
+  renderBunkerMarkers();
+}
+
+// ─────────────────────────────────────────────
+// SIREN MARKERS — placed at country centroid
+// ─────────────────────────────────────────────
+function renderSirenMarkers() {
+  // Clear old markers
+  Object.values(sirenMarkers).forEach(m => map.removeLayer(m));
+  Object.keys(sirenMarkers).forEach(k => delete sirenMarkers[k]);
+
+  COUNTRIES.forEach(c => {
+    let html, sz, cls;
+    const col  = daysCol(c.days);
+    const bar  = Math.min(100, (c.days / 90) * 100);
+    const domGap = c.consumption_kbd - c.production_kbd;
+    const impDep = c.consumption_kbd > 0 ? Math.round((c.imports_kbd / c.consumption_kbd) * 100) : 0;
+
+    if (c.days < 14) {
+      cls = 'mk-c'; sz = [20,20];
+      html = `<div class="mk ${cls}"><div class="mk-ring"></div><div class="mk-core"></div></div>`;
+    } else if (c.days < 45) {
+      cls = 'mk-w'; sz = [16,16];
+      html = `<div class="mk ${cls}"><div class="mk-ring"></div><div class="mk-core"></div></div>`;
+    } else if (c.days < 90) {
+      cls = 'mk-m'; sz = [9,9];
+      html = `<div class="mk ${cls}"><div class="mk-core"></div></div>`;
+    } else if (c.producer) {
+      cls = 'mk-p'; sz = [8,8];
+      html = `<div class="mk ${cls}"><div class="mk-core"></div></div>`;
+    } else {
+      cls = 'mk-o'; sz = [8,8];
+      html = `<div class="mk ${cls}"><div class="mk-core"></div></div>`;
+    }
+
+    const icon = L.divIcon({ html, className:'', iconSize:sz, iconAnchor:[sz[0]/2, sz[1]/2] });
+    const m = L.marker([c.lat, c.lng], {
+      icon,
+      zIndexOffset: c.days < 14 ? 1000 : c.days < 45 ? 500 : 0
+    }).addTo(map);
+
+    // Show tooltip on marker hover (not polygon)
+    m.on('mouseover', function() {
+      showHoverTip(null, c, col, bar, domGap, impDep);
+    });
+    m.on('mouseout', function() {
+      hideHoverTip();
+    });
+    // Click still opens popup
+    m.on('click', function() {
+      hideHoverTip();  // dismiss hover tooltip before showing click popup
+      // Build popup with static data first, then fetch AI insight
+      const pc = document.createElement('div');
+      pc.className = 'pc';
+      pc.innerHTML = `
+        <h3>${c.flag} ${c.name}</h3>
+        <div class="pr"><span>Days Until Empty</span><span class="pv" style="color:${col}">${c.days >= 999 ? '>365 days (oil exporter)' : c.days + ' days'}</span></div>
+        <div class="pr"><span>Oil Stockpile</span><span class="pv">${c.stocks_mb.toFixed(0)} million barrels</span></div>
+        <div class="pr"><span>Daily Oil Use</span><span class="pv">${(c.consumption_kbd/1000).toFixed(2)} million barrels/day</span></div>
+        <div class="pr"><span>Domestic Output</span><span class="pv">${c.production_kbd > 0 ? (c.production_kbd/1000).toFixed(2)+' M bbl/day' : 'Negligible'}</span></div>
+        <div class="pr"><span>Imported Oil</span><span class="pv">${c.imports_kbd > 0 ? (c.imports_kbd/1000).toFixed(2)+' M bbl/day ('+impDep+'% of needs)' : 'Net exporter'}</span></div>
+        <div class="pr"><span>Daily Supply Gap</span><span class="pv" style="color:${domGap>0?'#ff8040':'#4ade80'}">${domGap > 0 ? (domGap/1000).toFixed(2)+' M bbl/day shortfall' : 'Self-sufficient / surplus'}</span></div>
+        <div class="pr"><span>Strategic Reserve</span><span class="pv" style="font-size:8px;color:#4a7a9a">${c.nearest_spr}</span></div>
+        <div class="pr"><span>Data Source</span><span class="pv" style="color:#334155">${c._eia_live?'EIA (live)':c._wb_updated?'World Bank':'IEA / BP baseline'}</span></div>
+        <div class="pb"><div class="pbar" style="width:${bar}%;background:${col}"></div></div>
+        <div class="pl">Bar = stockpile vs 90-day IEA emergency benchmark · assumes all imports stop</div>
+        <div class="ai-section">
+          <div class="ai-label" id="ai-label-${c.iso3}">🤖 AI Risk Assessment</div>
+          <div class="ai-text" id="ai-${c.iso3}"><span class="ai-loading">Generating analysis…</span></div>
+        </div>`;
+
+      const popup = L.popup({ maxWidth:290, offset:[0,-4] })
+        .setLatLng([c.lat, c.lng])
+        .setContent(pc)
+        .openOn(map);
+
+      // Filter globally stored headlines relevant to this country
+      const countryWords = c.name.toLowerCase().split(/\s+/);
+      const supplyKeywords = ['oil','energy','supply','import','deal','contract','agreement',
+        'pipeline','tanker','refinery','crude','barrel','opec','sanctions','embargo',
+        'diversif','alternative','source','secur','purchase','sign','negoti','talk'];
+      const relevantHeadlines = _allNewsHeadlines.filter(h => {
+        const hl = h.toLowerCase();
+        const mentionsCountry = countryWords.some(w => w.length > 3 && hl.includes(w));
+        const mentionsSupply  = supplyKeywords.some(w => hl.includes(w));
+        return mentionsCountry || mentionsSupply;
+      }).slice(0, 20);
+
+      // Fetch AI insight from backend (non-blocking)
+      fetch(`${BACKEND}/api/ai/country`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:            c.name,
+          iso3:            c.iso3,
+          days:            c.days,
+          stocks_mb:       c.stocks_mb,
+          consumption_kbd: c.consumption_kbd,
+          production_kbd:  c.production_kbd,
+          imports_kbd:     c.imports_kbd,
+          nearest_spr:     c.nearest_spr,
+          producer:        c.producer || false,
+          news_headlines:  relevantHeadlines,
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        const el = document.getElementById(`ai-${c.iso3}`);
+        if (!el) return;
+        if (data.insight) {
+          // Build ref links as small icon chips
+          let refsHtml = '';
+          if (data.refs && data.refs.length) {
+            const chips = data.refs.map((r, i) =>
+              `<a href="${r.url}" target="_blank" rel="noopener"
+                  title="${r.title}"
+                  style="display:inline-flex;align-items:center;gap:3px;
+                         font-size:8px;color:#3b82f6;text-decoration:none;
+                         background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);
+                         border-radius:4px;padding:2px 5px;margin:2px 2px 0 0;
+                         white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis"
+                  ><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>${r.title.slice(0,18)}${r.title.length>18?'…':''}</a>`
+            ).join('');
+            refsHtml = `<div style="margin-top:6px;line-height:1.8">${chips}</div>`;
+          }
+          el.innerHTML = `<span>${data.insight}</span>${refsHtml}`;
+        } else {
+          el.innerHTML = '<span style="color:#475569">AI backend offline — start server.py</span>';
+        }
+        // Refresh popup size after content loads
+        popup.update();
+      })
+      .catch(() => {
+        const el = document.getElementById(`ai-${c.iso3}`);
+        if (el) el.innerHTML = '<span style="color:#475569">AI backend offline — start server.py</span>';
+      });
+    });
+
+    sirenMarkers[c.iso3] = m;
+  });
+}
+
+// ─────────────────────────────────────────────
+// SIDEBAR — COUNTRY RISK LIST
+// ─────────────────────────────────────────────
+function renderCountryList() {
+  const el = document.getElementById('clist');
+  el.innerHTML = '';
+  // Sort: critical first, then by days asc, exporters last
+  const sorted = [...COUNTRIES].sort((a, b) => {
+    const ad = a.days >= 999 ? 9999 : a.days;
+    const bd = b.days >= 999 ? 9999 : b.days;
+    return ad - bd;
+  });
+  sorted.forEach(c => {
+    const isHormuzHit = _hormuzDays > 0 && HORMUZ_EXPOSURE[c.iso3]?.[1] !== 'exporter' && HORMUZ_EXPOSURE[c.iso3];
+    const row = document.createElement('div');
+    row.className = 'cr' + (isHormuzHit ? ' hormuz-hit' : '');
+    const dLabel = c.days >= 999 ? 'EXP' : c.days + 'd';
+    const dot = c.days < 14 ? '🔴' : c.days < 45 ? '🟠' : c.days < 90 ? '🟡' : '🟢';
+    const detail = isHormuzHit
+      ? `Uses ${(c.consumption_kbd/1000).toFixed(1)} M bbl/day · Hormuz: ${(HORMUZ_EXPOSURE[c.iso3][0]/1000).toFixed(1)} M bbl/day`
+      : `Uses ${(c.consumption_kbd/1000).toFixed(1)} million barrels/day`;
+    row.innerHTML = `<div class="cf">${dot}</div>
+      <div class="ci">
+        <div class="cn2">${c.flag} ${c.name}</div>
+        <div class="cd">${detail}</div>
+      </div>
+      <div class="db ${daysClass(c.days)}">${dLabel}</div>`;
+    row.onclick = () => map.setView([c.lat, c.lng], 4, {animate:true});
+    el.appendChild(row);
+  });
+}
+
+// ─────────────────────────────────────────────
+// HEADER STATS
+// ─────────────────────────────────────────────
+// Floating tankers & depot estimate (Mb):
+// ~3,000 VLCCs + Suezmax/Aframax in transit, avg 2Mb cargo = ~6,000Mb at sea
+// Plus commercial shore depots not in SPR/op stocks (Rotterdam ARA, Fujairah,
+// Cushing pipeline line fill, Saldanha Bay, Kavkaz, etc.) = ~800Mb
+// Total estimate: ~6,800 Mb, dynamically reduced by Hormuz closure (tanker traffic drops)
+const FLOATING_BASE_MB = 6800;
+
+function updateStats() {
+  // ── Global Fuel Inventory (sum of all operational stocks across all tracked countries)
+  const totalInv = COUNTRIES.reduce((s, c) => s + c.stocks_mb, 0);
+  document.getElementById('g-inv').textContent = (totalInv / 1000).toFixed(1) + ' B bbl';
+
+  // ── Global Daily Usage (sum of all consumption_kbd)
+  const totalUse = COUNTRIES.reduce((s, c) => s + c.consumption_kbd, 0);
+  document.getElementById('g-use').textContent = (totalUse / 1000).toFixed(1) + ' M bbl/day';
+
+  // ── Global Daily Production (sum of all production_kbd, dynamic to Hormuz closure)
+  // When Hormuz is simulated, exporter production that goes through Hormuz is disrupted
+  let totalProd = COUNTRIES.reduce((s, c) => s + c.production_kbd, 0);
+  if (_hormuzDays > 0) {
+    // Reduce world production by Hormuz-transiting exporter volume
+    // ~21Mb/d flows through Hormuz; exporters lose that revenue but domestic supply intact
+    // However global SUPPLY (available oil on market) drops by the export disruption
+    // We compute the fraction of global supply lost: ~21Mb/d × closure_days impact
+    // Exponential build-up: every day of closure tightens supply more (refinery draws down)
+    const hormuzLostKbd = Object.entries(HORMUZ_EXPOSURE)
+      .filter(([, v]) => v[1] === 'exporter' || v[1] === 'both')
+      .reduce((s, [, v]) => s + v[0], 0);
+    // Daily production capacity effectively lost (scaled 0→100% over closure period):
+    const disruptFraction = Math.min(1, _hormuzDays / 30);
+    totalProd = Math.round(totalProd - hormuzLostKbd * disruptFraction);
+  }
+  const prodEl = document.getElementById('g-prod');
+  prodEl.textContent = (totalProd / 1000).toFixed(1) + ' M bbl/day';
+  // Colour the production chip: green=normal, amber=disrupted, red=severe
+  const prodChip = document.getElementById('g-prod-chip');
+  if (_hormuzDays > 0) {
+    prodChip.className = _hormuzDays > 15 ? 'sb red hormuz-dynamic' : 'sb amber hormuz-dynamic';
+  } else {
+    prodChip.className = 'sb amber';
+  }
+
+  // ── Floating Tankers & Depots (dynamic: Hormuz closure reduces tanker traffic)
+  let floating = FLOATING_BASE_MB;
+  if (_hormuzDays > 0) {
+    // Hormuz closure → tankers queue outside strait, depot drawdowns accelerate
+    // Effective floating supply drops as depots feed refineries faster
+    const drawFraction = Math.min(0.35, _hormuzDays / 30 * 0.35);
+    floating = Math.round(FLOATING_BASE_MB * (1 - drawFraction));
+  }
+  document.getElementById('g-flt').textContent = (floating / 1000).toFixed(1) + ' B bbl';
+
+  // ── Critical zones
+  const critCount = COUNTRIES.filter(c=>c.days<14 && c.days < 999).length;
+  document.getElementById('g-cri').textContent = critCount;
+  const critBadge = document.getElementById('crit-badge');
+  if (critBadge) {
+    critBadge.textContent = critCount + ' critical';
+    critBadge.className = 'pt-badge' + (critCount > 0 ? '' : ' ok');
+  }
+}
+
+// ─────────────────────────────────────────────
+// WORLD BANK — consumption (browser-direct)
+// ─────────────────────────────────────────────
+async function fetchWorldBank() {
+  setStep('World Bank: fetching consumption data…');
+  const codes = Object.values(ISO3_TO_ISO2).join(';');
+  const url = `https://api.worldbank.org/v2/country/${codes}/indicator/EG.USE.PCAP.KG.OE?format=json&mrv=1&per_page=70`;
+  try {
+    const r = await fetch(url, {signal:AbortSignal.timeout(12000)});
+    const data = await r.json();
+    const rows = data[1] || [];
+    // WB indicator EG.USE.PCAP.KG.OE = total energy per capita (kgoe) — ALL energy, not just oil.
+    // Oil is typically 30–45% of total energy for most countries.
+    // Apply oil share factor (0.38) to convert total energy → petroleum equivalent.
+    const OIL_SHARE = 0.38;
+    let n = 0;
+    rows.forEach(row => {
+      if (!row.value) return;
+      const iso2 = row.country.id;
+      const iso3 = ISO2_TO_ISO3[iso2];
+      if (!iso3) return;
+      const c = COUNTRIES.find(x=>x.iso3===iso3);
+      if (!c) return;
+      const pop = POP_M[iso2];
+      if (!pop) return;
+      // Total energy Mtoe → oil-only Mtoe → kbd
+      const totalMtoe = (row.value * pop * 1000) / 1e9;
+      const oilMtoe = totalMtoe * OIL_SHARE;
+      const kbd = Math.round((oilMtoe * 7330000) / 365 / 1000);
+      // Plausibility guard: only accept if within 30%–220% of IEA/BP baseline
+      // This prevents WB data quality issues from clobbering known-good baselines
+      const baseline = c.consumption_kbd;
+      const ratio = kbd / baseline;
+      if (kbd > 50 && ratio >= 0.30 && ratio <= 2.20) {
+        c.consumption_kbd = kbd;
+        c.days = computeDays(c.stocks_mb, kbd, c.production_kbd, c.imports_kbd);
+        c._wb_updated = true; n++;
+      } else if (kbd > 0) {
+        console.log(`WB ${iso3}: computed ${kbd} kbd vs baseline ${baseline} kbd (ratio ${ratio.toFixed(2)}) — keeping baseline`);
+      }
+    });
+    console.log(`WB updated ${n} countries`);
+  } catch(e) { console.warn('WB failed:', e); }
+}
+
+// ─────────────────────────────────────────────
+// EIA — US stocks via backend proxy
+// ─────────────────────────────────────────────
+async function fetchEIA() {
+  setStep('EIA: fetching US petroleum stocks…');
+  const el = document.getElementById('eia-rows');
+  el.innerHTML = '';
+  if (!USE_BACKEND) {
+    el.innerHTML = `<div style="padding:7px 11px;font-size:9px;color:#1e3050">
+      Start server.py for live EIA data<br><code style="font-size:8px">python server.py</code></div>`;
+    return;
+  }
+  try {
+    const r = await fetch(`${BACKEND}/api/eia/stocks`, {signal:AbortSignal.timeout(10000)});
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    const stocks = data.stocks || {};
+
+    // Push live EIA figures into US row
+    const crude = stocks['EPC0'];   // crude only
+    const total = stocks['EP00'];   // all petroleum products
+    const us = COUNTRIES.find(c=>c.iso3==='USA');
+    if (us && crude?.value_mb) {
+      // EIA crude stocks = commercial + SPR combined
+      us.stocks_mb = crude.value_mb;
+      us.days = computeDays(us.stocks_mb, us.consumption_kbd, us.production_kbd, us.imports_kbd);
+      us._eia_live = true;
+    }
+
+    const ORDER = ['EPC0','EP00','EPD0','EPM0','EPPR','EPJK'];
+    ORDER.forEach(code => {
+      const s = stocks[code];
+      if (!s || s.error) return;
+      const chg = s.change_mbbl;
+      let cs='', cc='fl';
+      if (chg!=null){ cs=(chg>0?'▲':'▼')+Math.abs(chg).toFixed(0); cc=chg>0?'up':'dn'; }
+      const row = document.createElement('div');
+      row.className = 'er';
+      const mbbl = Number(s.value_mbbl||0);
+      const mbblLabel = mbbl >= 1000 ? (mbbl/1000).toFixed(1)+' B bbl' : mbbl.toLocaleString()+' M bbl';
+      row.innerHTML = `<span class="el">${s.label}</span>
+        <span class="ev">${mbblLabel}
+        <span class="ec ${cc}">${cs}</span></span>`;
+      el.appendChild(row);
+    });
+
+    const period = Object.values(stocks).find(s=>s?.period)?.period || '';
+    if (period) {
+      const note = document.createElement('div');
+      note.style.cssText='padding:3px 11px;font-size:7px;color:#1e3050;';
+      note.textContent=`EIA week ending ${period} · eia.gov/opendata`;
+      el.appendChild(note);
+    }
+  } catch(e) {
+    el.innerHTML=`<div style="padding:7px 11px;font-size:9px;color:#1e3050">
+      EIA unavailable: ${e.message}<br>Start server.py</div>`;
+  }
+}
+
+// ─────────────────────────────────────────────
+// GDELT — geopolitical signals (browser-direct)
+// ─────────────────────────────────────────────
+const GQ = [
+  'oil+sanctions+embargo',
+  'OPEC+production+output',
+  'oil+pipeline+disruption',
+  'tanker+shipping+strait+oil',
+  'oil+energy+war+conflict',
+];
+const HI = ['iran','russia','houthi','sanction','attack','strike','block','halt','crisis','conflict','war','embargo','disruption','shutdown'];
+const MI = ['opec','production cut','delay','dispute','tension','protest','shortage','supply chain','concern'];
+
+function classify(t){ const s=t.toLowerCase(); return HI.some(w=>s.includes(w))?'h':MI.some(w=>s.includes(w))?'m':'l'; }
+
+function relT(d){
+  if(!d||d.length<15)return '';
+  const dt=new Date(`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}T${d.slice(9,11)}:${d.slice(11,13)}:00Z`);
+  const h=Math.floor((Date.now()-dt)/3600000);
+  return h<1?'just now':h<24?`${h}h ago`:`${Math.floor(h/24)}d ago`;
+}
+
+async function fetchGDELT() {
+  setStep('GDELT: fetching geopolitical signals…');
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '';
+  const arts = [];
+
+  // Date window: last 3 days  (YYYYMMDDHHMMSS format)
+  const now = new Date();
+  const threeDaysAgo = new Date(now - 3 * 86400000);
+  function gdeltDate(d) {
+    return d.getUTCFullYear().toString()
+      + String(d.getUTCMonth()+1).padStart(2,'0')
+      + String(d.getUTCDate()).padStart(2,'0')
+      + String(d.getUTCHours()).padStart(2,'0')
+      + String(d.getUTCMinutes()).padStart(2,'0')
+      + String(d.getUTCSeconds()).padStart(2,'0');
+  }
+  const startDate = gdeltDate(threeDaysAgo);
+
+  // Fire all GDELT queries in parallel with a 6s timeout each
+  const gdeltResults = await Promise.allSettled(
+    GQ.map(q =>
+      fetch(
+        `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&format=json&maxrecords=10&sourcelang=english&sort=datedesc&startdatetime=${startDate}`,
+        {signal:AbortSignal.timeout(6000)}
+      ).then(r=>r.json()).catch(e=>{ console.warn('GDELT q fail:', q, e); return null; })
+    )
+  );
+  gdeltResults.forEach(res=>{
+    if(res.status==='fulfilled' && res.value)
+      (res.value.articles||[]).forEach(a=>{ if(a.title?.length>10) arts.push(a); });
+  });
+  const seen=new Set();
+  const deduped = arts.filter(a=>{
+    const k=a.title.slice(0,38);
+    if(seen.has(k))return false; seen.add(k); return true;
+  }).sort((a,b)=>(b.seendate||'').localeCompare(a.seendate||''));
+
+  document.getElementById('g-sig').textContent = deduped.length;
+  const sigBadge = document.getElementById('sig-badge');
+  if (sigBadge) sigBadge.textContent = deduped.length + ' signals (3 days)';
+
+  const TL={h:'HIGH RISK',m:'MEDIUM RISK',l:'MONITOR'};
+  const TC={h:'th',m:'tm',l:'tl'};
+  deduped.slice(0,35).forEach(a=>{
+    const imp=classify(a.title+(a.sourcecountry||''));
+    const el=document.createElement('div'); el.className='fi';
+    const src = a.domain || a.sourcecountry || 'Global';
+    const timeStr = relT(a.seendate);
+    // CTA link — always shown so user can read & assess
+    el.innerHTML=`
+      <div class="fs">${src} <span style="color:#1e3050;font-weight:400;text-transform:none;letter-spacing:0">· ${timeStr}</span></div>
+      <div class="ft">${a.title}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+        <span class="ftag ${TC[imp]}">${TL[imp]}</span>
+        <a href="${a.url}" target="_blank" rel="noopener" class="fi-link" onclick="event.stopPropagation()">Read article →</a>
+      </div>`;
+    el.onclick=()=>window.open(a.url,'_blank');
+    feed.appendChild(el);
+  });
+  if(!deduped.length) feed.innerHTML='<div style="padding:10px 13px;font-size:10px;color:#3a5a7a">No signals found in last 3 days. Check network.</div>';
+  // Store titles globally for AI context
+  deduped.forEach(a => { if(a.title) _allNewsHeadlines.push(a.title); });
+  return deduped;
+}
+
+// ─────────────────────────────────────────────
+// NewsAPI — via backend
+// ─────────────────────────────────────────────
+async function fetchNews() {
+  if(!USE_BACKEND) return;
+  const feed = document.getElementById('feed');
+  try{
+    const r=await fetch(`${BACKEND}/api/news/geopolitical`,{signal:AbortSignal.timeout(10000)});
+    if(!r.ok) throw new Error(r.status);
+    const d=await r.json();
+    const arts=d.articles||[];
+    if(!arts.length) return;
+    const sep=document.createElement('div');
+    sep.style.cssText='padding:3px 11px;font-size:7px;color:#1e3050;border-bottom:1px solid #0f1e2e;';
+    sep.textContent='── NewsAPI Headlines ──';
+    feed.insertBefore(sep,feed.firstChild);
+    const TL={h:'HIGH',m:'MEDIUM',l:'MONITOR'};
+    const TC={h:'th',m:'tm',l:'tl'};
+    arts.forEach(a=>{
+      const imp=classify((a.title||'')+(a.description||''));
+      const tStr=a.publishedAt?relT(a.publishedAt.replace(/-/g,'').replace('T','T').slice(0,15)+'Z'):'';
+      const el=document.createElement('div'); el.className='fi';
+      el.innerHTML=`<div class="fs">${a.source||'NewsAPI'} <span style="color:#1e3050;font-weight:400;text-transform:none;letter-spacing:0">· ${tStr}</span></div>
+        <div class="ft">${a.title||''}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+          <span class="ftag ${TC[imp]}">${TL[imp]} IMPACT</span>
+          <a href="${a.url}" target="_blank" rel="noopener" class="fi-link" onclick="event.stopPropagation()">Read article →</a>
+        </div>`;
+      el.onclick=()=>window.open(a.url,'_blank');
+      feed.insertBefore(el, feed.children[1]||null);
+    });
+    // Store titles globally for AI context
+    arts.forEach(a => { if(a.title) _allNewsHeadlines.push(a.title); });
+  }catch(e){ console.warn('NewsAPI failed:', e); }
+}
+
+// ─────────────────────────────────────────────
+// AI FORWARD ANALYSIS
+// ─────────────────────────────────────────────
+function buildAnalysis(gdelt){
+  const crit=COUNTRIES.filter(c=>c.days<14);
+  const warn=COUNTRIES.filter(c=>c.days>=14&&c.days<45);
+  const us=COUNTRIES.find(c=>c.iso3==='USA');
+  const hi=gdelt.filter(a=>classify(a.title)==='h').length;
+  return `Forward Outlook · ${new Date().toUTCString().slice(0,25)} UTC\n`
+   +(crit.length?`🚨 CRITICAL (${crit.length}): ${crit.map(c=>`${c.flag}${c.name}(${c.days}d)`).join(', ')} — emergency supply intervention required. `:'')
+   +(warn.length?`⚠️ WARNING (${warn.length} countries in 14–45d buffer). `:'')
+   +`US operational stocks: ${us?.stocks_mb.toFixed(0)||'—'}Mb `+(us?._eia_live?'[EIA Live]':'[IEA baseline]')+'. '
+   +`GDELT: ${hi} high-impact signals detected. `
+   +(hi>3?'Elevated geopolitical risk — monitor Middle East corridors, sanctions pipeline. ':'Geopolitical risk within normal bounds. ')
+   +`WB consumption updated for ${COUNTRIES.filter(c=>c._wb_updated).length} countries. `
+   +`Next EIA release: Wednesday 10:30 ET. Next refresh: ${new Date(Date.now()+86400000).toUTCString().slice(0,16)} UTC.`;
+}
+
+function typeWrite(el, text, speed=9){
+  el.textContent=''; let i=0;
+  const t=setInterval(()=>{ el.textContent+=text[i++]; if(i>=text.length)clearInterval(t); },speed);
+}
+
+// ─────────────────────────────────────────────
+// HOVER TOOLTIP
+// ─────────────────────────────────────────────
+const htip = document.getElementById('htip');
+
+function positionHoverTip(lat, lng, yOffset = 0) {
+  // Convert geographic centroid → container pixel, then to page coords
+  const pt = map.latLngToContainerPoint([lat, lng]);
+  const mapRect = document.getElementById('map').getBoundingClientRect();
+  // Use absolute positioning inside #map-wrap; apply yOffset to clear the marker icon
+  const x = pt.x;
+  const y = pt.y + yOffset;
+  // Clamp so tooltip stays within map-wrap bounds
+  const tipW = 270, tipH = 320;
+  let left = x;
+  // If tooltip would overflow right edge, shift left
+  if (left + tipW/2 > mapRect.width)  left = mapRect.width - tipW/2 - 8;
+  if (left - tipW/2 < 0)              left = tipW/2 + 8;
+  // If tooltip would overflow top, place below centroid instead
+  const aboveY = y - 10;
+  if (aboveY - tipH < 0) {
+    // place below the icon
+    htip.style.transform = 'translate(-50%, 10px)';
+  } else {
+    // place above the icon
+    htip.style.transform = 'translate(-50%, -105%)';
+  }
+  htip.style.left = left + 'px';
+  htip.style.top  = y + 'px';
+}
+
+function showHoverTip(evt, cd, col, bar, domGap, impDep) {
+  if (!cd) {
+    // Unknown country — just show name, position at mouse for unknown countries
+    htip.innerHTML = `<div class="ht-name">🌍 ${col || 'No data'}</div>
+      <div class="ht-row"><span class="ht-lbl">Status</span><span class="ht-val" style="color:#1e304d">No inventory data</span></div>`;
+    htip.style.transform = 'translate(-50%, -105%)';
+    const pt = map.containerPointToLayerPoint(map.mouseEventToContainerPoint(evt));
+    const mapPt = map.mouseEventToContainerPoint(evt);
+    htip.style.left = mapPt.x + 'px';
+    htip.style.top  = mapPt.y + 'px';
+  } else {
+    const runwayTxt = cd.days >= 999 ? '>365 days (oil exporter)' : cd.days + ' days';
+    const shortfallTxt = domGap > 0 ? (domGap/1000).toFixed(2) + ' M bbl/day gap' : 'Self-sufficient / surplus';
+    const hormuz = HORMUZ_EXPOSURE[cd.iso3];
+    const hormuzLine = hormuz
+      ? `<div class="ht-row"><span class="ht-lbl">Hormuz Strait Exposure</span><span class="ht-val" style="color:#ff9090">${(hormuz[0]/1000).toFixed(1)} M bbl/day (${hormuz[1]})</span></div>`
+      : '';
+
+    // Per-product breakdown from API (if available)
+    const ps = _productStocks[cd.iso3];
+    const PRODUCT_LABELS = [
+      ['crude',       'Crude Oil'],
+      ['gasoline',    'Gasoline'],
+      ['diesel',      'Diesel'],
+      ['jet',         'Jet Fuel'],
+      ['fuel_oil',    'Fuel Oil'],
+      ['lpg_naphtha', 'LPG/Naphtha'],
+    ];
+    let productBlock = '';
+    if (ps) {
+      const rows = PRODUCT_LABELS
+        .filter(([k]) => ps[k] != null && ps[k] > 0)
+        .map(([k, lbl]) => {
+          const pct = cd.stocks_mb > 0 ? Math.round(ps[k] / cd.stocks_mb * 100) : 0;
+          return `<div class="ht-prod-row">
+            <span class="ht-prod-lbl">${lbl}</span>
+            <span class="ht-prod-bar-wrap"><span class="ht-prod-bar" style="width:${pct}%"></span></span>
+            <span class="ht-prod-val">${ps[k].toFixed(1)} Mb</span>
+          </div>`;
+        }).join('');
+      const srcBadge = ps.source ? `<span class="ht-prod-src">${ps.source}</span>` : '';
+      if (rows) {
+        productBlock = `<div class="ht-prod-section">
+          <div class="ht-prod-head">Inventory Breakdown ${srcBadge}</div>
+          ${rows}
+        </div>`;
+      }
+    }
+
+    htip.innerHTML = `
+      <div class="ht-name">${cd.flag} ${cd.name}</div>
+      <div class="ht-row"><span class="ht-lbl">Days Until Empty</span><span class="ht-val" style="color:${col}">${runwayTxt}</span></div>
+      <div class="ht-row"><span class="ht-lbl">Oil Stockpile</span><span class="ht-val">${cd.stocks_mb.toFixed(0)} million barrels</span></div>
+      <div class="ht-row"><span class="ht-lbl">Daily Oil Use</span><span class="ht-val">${(cd.consumption_kbd/1000).toFixed(2)} M bbl/day</span></div>
+      <div class="ht-row"><span class="ht-lbl">Domestic Output</span><span class="ht-val">${cd.production_kbd > 0 ? (cd.production_kbd/1000).toFixed(2)+' M bbl/day' : 'None'}</span></div>
+      <div class="ht-row"><span class="ht-lbl">Daily Supply Gap</span><span class="ht-val" style="color:${domGap>0?'#ff8040':'#2ec87a'}">${shortfallTxt}</span></div>
+      ${hormuzLine}
+      ${productBlock}
+      <div class="ht-row"><span class="ht-lbl">Strategic Reserve</span><span class="ht-val" style="font-size:7.5px;color:#4a7a9a">${cd.nearest_spr}</span></div>
+      <div class="ht-bar-wrap"><div class="ht-bar" style="width:${Math.min(100,bar)}%;background:${col}"></div></div>
+      <div class="ht-hint">Stockpile vs 90-day emergency standard (IEA) · Click icon for full detail</div>`;
+    // Position above the marker icon (centroid offset by -20px to clear the icon)
+    positionHoverTip(cd.lat, cd.lng, -20);
+  }
+  htip.style.display = 'block';
+}
+
+function hideHoverTip() {
+  htip.style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+// STRAIT OF HORMUZ CLOSURE SIMULATOR
+// ─────────────────────────────────────────────
+function applyHormuzClosure() {
+  const slider = document.getElementById('hormuz-sel');
+  const days = parseInt(slider.value, 10);
+
+  // Update slider fill gradient and day label
+  const pct = ((days - 5) / (30 - 5)) * 100;
+  slider.style.setProperty('--pct', pct + '%');
+  document.getElementById('hormuz-day-lbl').textContent = days + (days === 1 ? ' day' : ' days');
+
+  // Snapshot originals on first sim
+  if (!Object.keys(_origStocks).length) {
+    COUNTRIES.forEach(c => { _origStocks[c.iso3] = { stocks_mb: c.stocks_mb, days: c.days }; });
+  } else {
+    // Restore originals before re-simulating
+    COUNTRIES.forEach(c => {
+      const o = _origStocks[c.iso3];
+      if (o) { c.stocks_mb = o.stocks_mb; c.days = o.days; }
+    });
+  }
+  _hormuzDays = days;
+
+  // For each importer exposed to Hormuz: subtract lost inbound supply
+  // Stocks drained = Hormuz_kbd × closure_days / 1000  (kbd × days → Mb)
+  COUNTRIES.forEach(c => {
+    const exp = HORMUZ_EXPOSURE[c.iso3];
+    if (!exp) return;
+    const [kbd, role] = exp;
+    if (role === 'importer' || role === 'both') {
+      // Each closure day, the country receives no Hormuz imports
+      // Effective stock reduction = kbd * days / 1000 Mb
+      const lost_mb = (kbd * days) / 1000;
+      c.stocks_mb = Math.max(0, ((_origStocks[c.iso3]?.stocks_mb) || c.stocks_mb) - lost_mb);
+      c.days = computeDays(c.stocks_mb, c.consumption_kbd, c.production_kbd, c.imports_kbd);
+    }
+  });
+
+  // Update map markers only (no GeoJSON re-fetch — choropleth borders stay as-is)
+  renderSirenMarkers();
+  renderCountryList();
+  updateStats();
+
+  // Show badge (in header row) and reset button
+  const badge = document.getElementById('hormuz-badge');
+  const reset = document.getElementById('hormuz-reset');
+  const affected = COUNTRIES.filter(c => HORMUZ_EXPOSURE[c.iso3]?.[1] !== 'exporter' && HORMUZ_EXPOSURE[c.iso3]).length;
+  badge.textContent = `${days}d — ${affected} affected`;
+  badge.style.display = 'inline-block';
+  reset.style.display = 'inline-block';
+
+  // Update AI analysis and switch to analysis tab
+  const el = document.getElementById('ait');
+  const critNow = COUNTRIES.filter(c => c.days < 14 && HORMUZ_EXPOSURE[c.iso3]);
+  const warnNow = COUNTRIES.filter(c => c.days >= 14 && c.days < 45 && HORMUZ_EXPOSURE[c.iso3]);
+  const simText = `🛢 HORMUZ SIMULATION (${days}-day closure):\n`
+    + `Approx 21 Mb/d halted. ${critNow.length} countries fall CRITICAL (<14d): `
+    + (critNow.length ? critNow.map(c=>`${c.flag}${c.name}(${c.days}d)`).join(', ') : 'none') + '.\n'
+    + `${warnNow.length} countries enter WARNING (14–45d): `
+    + (warnNow.length ? warnNow.map(c=>`${c.flag}${c.name}(${c.days}d)`).join(', ').slice(0,200) : 'none') + '.\n'
+    + `Key choke-point: Saudi Arabia, UAE, Iraq, Kuwait and Qatar exports halted. `
+    + `Asia (Japan, South Korea, China, India) most exposed — combined Hormuz intake ~11,350 kbd. `
+    + `Reset simulation to restore baseline.`;
+  typeWrite(el, simText);
+  showTab('analysis');
+}
+
+function resetHormuzClosure() {
+  if (Object.keys(_origStocks).length) {
+    COUNTRIES.forEach(c => {
+      const o = _origStocks[c.iso3];
+      if (o) { c.stocks_mb = o.stocks_mb; c.days = o.days; }
+    });
+    _origStocks = {};
+    _hormuzDays = 0;
+  }
+  const slider = document.getElementById('hormuz-sel');
+  slider.value = '5';
+  slider.style.setProperty('--pct', '0%');
+  document.getElementById('hormuz-day-lbl').textContent = '5 days';
+  document.getElementById('hormuz-badge').style.display = 'none';
+  document.getElementById('hormuz-reset').style.display = 'none';
+  renderSirenMarkers();
+  renderCountryList();
+  updateStats();
+}
+
+// ─────────────────────────────────────────────
+// COUNTRY SEARCH (predictive, 3-letter)
+// ─────────────────────────────────────────────
+function onCountrySearch(val) {
+  const box = document.getElementById('search-suggest');
+  const q = val.trim().toLowerCase();
+  if (q.length < 1) { box.style.display = 'none'; return; }
+
+  const matches = [...COUNTRIES]
+    .filter(c => c.name.toLowerCase().includes(q) || c.iso3.toLowerCase().startsWith(q))
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 8);
+
+  if (!matches.length) { box.style.display = 'none'; return; }
+
+  box.innerHTML = matches.map(c => {
+    const col = daysCol(c.days);
+    const dLabel = c.days >= 999 ? 'EXP' : c.days + 'd';
+    return `<div class="ss-item" onmousedown="selectCountry('${c.iso3}')">
+      <span class="ss-flag">${c.flag}</span>
+      <span class="ss-name">${c.name}</span>
+      <span class="ss-days" style="color:${col}">${dLabel}</span>
+    </div>`;
+  }).join('');
+  box.style.display = 'block';
+}
+
+function hideSuggest() {
+  document.getElementById('search-suggest').style.display = 'none';
+}
+
+function selectCountry(iso3) {
+  const c = COUNTRIES.find(x => x.iso3 === iso3);
+  if (!c) return;
+  document.getElementById('csearch').value = c.name;
+  hideSuggest();
+  map.setView([c.lat, c.lng], 4, { animate: true });
+  // Highlight the row in the country list
+  document.querySelectorAll('.cr').forEach(r => r.style.background = '');
+  const rows = document.querySelectorAll('#clist .cr');
+  rows.forEach(r => {
+    if (r.querySelector('.cn2')?.textContent === c.name) {
+      r.style.background = '#0f1e38';
+      r.scrollIntoView({ block: 'nearest' });
+    }
+  });
+}
+
+// ─────────────────────────────────────────────
+// REFRESH COUNTDOWN
+// ─────────────────────────────────────────────
+let nxtT=Date.now()+86400000;
+function tickCountdown(){
+  const r=Math.max(0,nxtT-Date.now());
+  const h=Math.floor(r/3600000), m=Math.floor((r%3600000)/60000);
+  document.getElementById('nxt').textContent=`Next refresh in ${h}h ${m}m`;
+}
+setInterval(tickCountdown,60000);
+
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+const _steps = ['EIA data','World Bank','Map borders','Geopolitical','News','Rendering'];
+let _stepIdx = 0;
+function setStep(s){
+  document.getElementById('lstep').textContent = s;
+  _stepIdx = Math.min(_stepIdx + 1, _steps.length);
+  document.getElementById('lpbar').style.width = Math.round((_stepIdx / _steps.length) * 100) + '%';
+}
+
+// ─────────────────────────────────────────────
+// SIDEBAR TABS
+// ─────────────────────────────────────────────
+function showTab(name) {
+  ['risk','signals','analysis'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === name);
+    document.getElementById('panel-' + t).classList.toggle('active', t === name);
+  });
+}
+
+// ─────────────────────────────────────────────
+// HORMUZ PANEL TOGGLE
+// ─────────────────────────────────────────────
+function toggleHormuz() {
+  const body = document.getElementById('hormuz-body');
+  const icon = document.getElementById('hp-toggle-icon');
+  body.classList.toggle('collapsed');
+  icon.classList.toggle('open');
+}
+
+
+// ─────────────────────────────────────────────
+// GLOBAL BUNKER & SPR LOCATIONS
+// Major strategic petroleum reserves + commercial hubs
+// capacity_mb = operational storage capacity in million barrels
+// type: SPR | Commercial | Transit
+// ─────────────────────────────────────────────
+const BUNKERS = [
+  // ── USA ──
+  { name:"Bryan Mound SPR",          city:"Freeport, TX",             lat:28.940, lng:-95.360, capacity_mb:254, type:"SPR",        flag:"🇺🇸" },
+  { name:"Big Hill SPR",             city:"Winnie, TX",               lat:29.820, lng:-94.390, capacity_mb:170, type:"SPR",        flag:"🇺🇸" },
+  { name:"West Hackberry SPR",       city:"Lake Charles, LA",         lat:29.970, lng:-93.360, capacity_mb:220, type:"SPR",        flag:"🇺🇸" },
+  { name:"Bayou Choctaw SPR",        city:"Plaquemine, LA",           lat:30.290, lng:-91.230, capacity_mb: 74, type:"SPR",        flag:"🇺🇸" },
+  { name:"Cushing Pipeline Hub",     city:"Cushing, OK",              lat:35.980, lng:-96.770, capacity_mb: 90, type:"Commercial", flag:"🇺🇸" },
+  // ── China ──
+  { name:"Zhoushan SPR",             city:"Zhoushan, Zhejiang",       lat:29.984, lng:122.205, capacity_mb:140, type:"SPR",        flag:"🇨🇳" },
+  { name:"Zhenhai SPR",              city:"Ningbo, Zhejiang",         lat:29.964, lng:121.715, capacity_mb:103, type:"SPR",        flag:"🇨🇳" },
+  { name:"Lanzhou SPR",              city:"Lanzhou, Gansu",           lat:36.061, lng:103.834, capacity_mb: 80, type:"SPR",        flag:"🇨🇳" },
+  // ── Japan ──
+  { name:"Kikuma Oil Terminal",      city:"Kikuma, Ehime",            lat:34.020, lng:132.960, capacity_mb:105, type:"SPR",        flag:"🇯🇵" },
+  { name:"Shibushi Oil Terminal",    city:"Shibushi, Kagoshima",      lat:31.468, lng:131.098, capacity_mb: 98, type:"SPR",        flag:"🇯🇵" },
+  // ── South Korea ──
+  { name:"Ulsan Oil Hub",            city:"Ulsan, South Korea",       lat:35.540, lng:129.318, capacity_mb: 80, type:"SPR",        flag:"🇰🇷" },
+  { name:"Yeosu SPR Terminal",       city:"Yeosu, South Jeolla",      lat:34.744, lng:127.744, capacity_mb: 60, type:"SPR",        flag:"🇰🇷" },
+  // ── Saudi Arabia ──
+  { name:"Abqaiq Processing Plant",  city:"Abqaiq, Eastern Province", lat:25.934, lng: 49.664, capacity_mb:250, type:"SPR",        flag:"🇸🇦" },
+  { name:"Ras Tanura Terminal",      city:"Ras Tanura, Saudi Arabia", lat:26.644, lng: 50.160, capacity_mb:120, type:"Commercial", flag:"🇸🇦" },
+  // ── UAE ──
+  { name:"Fujairah Oil Terminal",    city:"Fujairah, UAE",            lat:25.122, lng: 56.336, capacity_mb:200, type:"Transit",    flag:"🇦🇪" },
+  { name:"Ruwais Industrial Hub",    city:"Ruwais, Abu Dhabi",        lat:24.102, lng: 52.748, capacity_mb: 50, type:"Commercial", flag:"🇦🇪" },
+  // ── Iran ──
+  { name:"Kharg Island Terminal",    city:"Kharg Island, Iran",       lat:29.250, lng: 50.325, capacity_mb:120, type:"Commercial", flag:"🇮🇷" },
+  // ── Netherlands ──
+  { name:"Rotterdam ARA Hub",        city:"Rotterdam, Netherlands",   lat:51.898, lng:  4.473, capacity_mb: 80, type:"Transit",    flag:"🇳🇱" },
+  // ── Singapore ──
+  { name:"Jurong Island Terminal",   city:"Jurong Island, Singapore", lat: 1.263, lng:103.701, capacity_mb: 80, type:"Transit",    flag:"🇸🇬" },
+  // ── India ──
+  { name:"Visakhapatnam SPR",        city:"Visakhapatnam, India",     lat:17.686, lng: 83.218, capacity_mb: 16, type:"SPR",        flag:"🇮🇳" },
+  { name:"Padur SPR Cavern",         city:"Udupi, Karnataka",         lat:13.317, lng: 74.745, capacity_mb: 12, type:"SPR",        flag:"🇮🇳" },
+  { name:"Mangaluru SPR",            city:"Mangaluru, Karnataka",     lat:12.917, lng: 74.855, capacity_mb:  9, type:"SPR",        flag:"🇮🇳" },
+  // ── UK ──
+  { name:"Milford Haven Terminal",   city:"Milford Haven, Wales",     lat:51.707, lng: -5.039, capacity_mb: 30, type:"Commercial", flag:"🇬🇧" },
+  // ── Germany ──
+  { name:"Wilhelmshaven Terminal",   city:"Wilhelmshaven, Germany",   lat:53.526, lng:  8.149, capacity_mb: 20, type:"Commercial", flag:"🇩🇪" },
+  // ── Canada ──
+  { name:"Hardisty Hub",             city:"Hardisty, Alberta",        lat:52.674, lng:-111.307, capacity_mb:35, type:"Commercial", flag:"🇨🇦" },
+  // ── South Africa ──
+  { name:"Saldanha Bay SPR",         city:"Saldanha Bay, W. Cape",    lat:-33.013, lng: 17.950, capacity_mb: 45, type:"SPR",       flag:"🇿🇦" },
+  // ── Qatar ──
+  { name:"Ras Laffan Industrial",    city:"Ras Laffan, Qatar",        lat:25.905, lng: 51.562, capacity_mb: 60, type:"Commercial", flag:"🇶🇦" },
+  // ── Australia ──
+  { name:"Lytton Refinery Hub",      city:"Brisbane, Queensland",     lat:-27.437, lng:153.151, capacity_mb:12, type:"Commercial", flag:"🇦🇺" },
+  // ── Spain ──
+  { name:"Tarragona Oil Hub",        city:"Tarragona, Spain",         lat:41.069, lng:  1.221, capacity_mb: 18, type:"Commercial", flag:"🇪🇸" },
+  // ── Italy ──
+  { name:"Trieste Oil Terminal",     city:"Trieste, Italy",           lat:45.645, lng: 13.735, capacity_mb: 22, type:"Commercial", flag:"🇮🇹" },
+];
+
+let _bunkerMarkers = [];
+
+function renderBunkerMarkers() {
+  // Remove old bunker markers
+  _bunkerMarkers.forEach(m => map.removeLayer(m));
+  _bunkerMarkers = [];
+
+  BUNKERS.forEach(b => {
+    const typeColor = b.type === 'SPR' ? '#facc15' : b.type === 'Transit' ? '#22d3ee' : '#a78bfa';
+    const typeIcon  = b.type === 'SPR' ? '🏛' : b.type === 'Transit' ? '⚓' : '🏭';
+
+    const icon = L.divIcon({
+      html: `<div class="bk-wrap">
+               <div class="bk-icon" style="border-color:${typeColor}55;background:${typeColor}18;">${typeIcon}</div>
+               <div class="bk-stem" style="background:${typeColor}80;"></div>
+               <div class="bk-dot" style="background:${typeColor};"></div>
+             </div>`,
+      className: '',
+      iconSize: [22, 30],
+      iconAnchor: [11, 30],
+    });
+
+    const m = L.marker([b.lat, b.lng], { icon, zIndexOffset: -100 });
+
+    const barPct = Math.min(100, Math.round((b.capacity_mb / 300) * 100));
+    const popupHtml = `<div class="bunker-popup">
+      <h3>${b.flag} ${b.name}</h3>
+      <div class="bp"><span>City / Location</span><span class="bpv">${b.city}</span></div>
+      <div class="bp"><span>Facility Type</span><span class="bpv" style="color:${typeColor}">${b.type}</span></div>
+      <div class="bp"><span>Storage Capacity</span><span class="bpv">${b.capacity_mb} M bbl</span></div>
+      <div class="pb" style="margin-top:6px"><div class="pbar" style="width:${barPct}%;background:${typeColor}"></div></div>
+      <div class="pl">Capacity vs. 300 Mb scale · Source: IEA / SPR operator data</div>
+    </div>`;
+
+    m.bindPopup(popupHtml, { maxWidth: 270, offset: [0, -30] });
+    m.addTo(map);
+    _bunkerMarkers.push(m);
+  });
+}
+
+// ─────────────────────────────────────────────
+// CRUDE PRICE TICKER
+// ─────────────────────────────────────────────
+async function fetchCrudePrice() {
+  try {
+    const r = await fetch(`${BACKEND}/api/crude-price`);
+    if (!r.ok) return;
+    const d = await r.json();
+
+    function fmtChg(val, pct) {
+      const sign = val >= 0 ? '+' : '';
+      return `${sign}${val.toFixed(2)} (${sign}${pct.toFixed(1)}%)`;
+    }
+
+    // Server returns d.prices.WTI / d.prices.Brent
+    const prices = d.prices || {};
+    const wti = prices.WTI;
+    const brt = prices.Brent;
+
+    if (wti) {
+      const priceEl = document.getElementById('pb-wti-price');
+      const chgEl   = document.getElementById('pb-wti-chg');
+      const wavgEl  = document.getElementById('pb-wti-wavg');
+      if (priceEl) priceEl.textContent = `$${wti.price.toFixed(2)}`;
+      if (chgEl) {
+        chgEl.textContent = fmtChg(wti.change_1d, wti.change_1d_pct);
+        chgEl.className   = 'pt-chg ' + (wti.change_1d >= 0 ? 'up' : 'dn');
+      }
+      if (wavgEl && wti.weighted_avg_since_war) {
+        wavgEl.textContent = `w\u0305 $${wti.weighted_avg_since_war.toFixed(2)}`;
+      }
+    }
+
+    if (brt) {
+      const priceEl = document.getElementById('pb-brent-price');
+      const chgEl   = document.getElementById('pb-brent-chg');
+      if (priceEl) priceEl.textContent = `$${brt.price.toFixed(2)}`;
+      if (chgEl) {
+        chgEl.textContent = fmtChg(brt.change_1d, brt.change_1d_pct);
+        chgEl.className   = 'pt-chg ' + (brt.change_1d >= 0 ? 'up' : 'dn');
+      }
+    }
+
+    // War-onset change (WTI)
+    if (wti) {
+      const warPctEl = document.getElementById('pb-war-pct');
+      if (warPctEl) {
+        const pct = wti.change_since_war_pct;
+        const sign = pct >= 0 ? '+' : '';
+        warPctEl.textContent = `${sign}${pct.toFixed(1)}%`;
+        warPctEl.style.color = pct >= 0 ? '#4ade80' : '#f87171';
+      }
+    }
+
+    // Sparkline in price prediction panel — populate from WTI daily_series
+    if (wti && wti.daily_series) {
+      renderPriceSparkline(wti.daily_series);
+    }
+
+    // Timestamp
+    const updEl = document.getElementById('pb-updated');
+    if (updEl && wti && wti.period) {
+      updEl.textContent = `EIA spot · ${wti.period} · refreshes hourly`;
+    }
+
+  } catch (e) {
+    console.warn('fetchCrudePrice error', e);
+  }
+}
+
+// Hourly auto-refresh for price ticker
+setInterval(fetchCrudePrice, 3600000);
+
+// ─────────────────────────────────────────────
+// AI PRICE PREDICTION PANEL
+// ─────────────────────────────────────────────
+function renderPriceSparkline(series) {
+  const svg = document.getElementById('price-spark');
+  if (!svg || !series || series.length < 2) return;
+
+  const prices = series.map(p => p.price);
+  const lo = Math.min(...prices);
+  const hi = Math.max(...prices);
+  const range = hi - lo || 1;
+  const W = 300, H = 32, pad = 4;
+
+  // Build polyline points
+  const pts = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * W;
+    const y = pad + (1 - (p - lo) / range) * (H - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  // Find war-onset index
+  const warIdx = series.findIndex(p => p.is_war_start);
+  let warLineX = null;
+  if (warIdx >= 0) {
+    warLineX = ((warIdx / (prices.length - 1)) * W).toFixed(1);
+  }
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="spark-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#fbbf24" stop-opacity=".35"/>
+        <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${warLineX ? `<line x1="${warLineX}" y1="0" x2="${warLineX}" y2="${H}" stroke="rgba(239,68,68,.5)" stroke-width="1" stroke-dasharray="2,2"/>` : ''}
+    <polygon points="${pts} ${W},${H} 0,${H}" fill="url(#spark-grad)" opacity=".5"/>
+    <polyline points="${pts}" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  `;
+
+  // Labels
+  const loEl = document.getElementById('spark-lo');
+  const hiEl = document.getElementById('spark-hi');
+  if (loEl) loEl.textContent = `$${lo.toFixed(0)}`;
+  if (hiEl) hiEl.textContent = `$${hi.toFixed(0)}`;
+}
+
+// ─────────────────────────────────────────────
+// SCENARIO PREDICTION
+// ─────────────────────────────────────────────
+const SCENARIO_COLORS = { 1:'#ef4444', 2:'#f97316', 3:'#22d3ee', 4:'#4ade80' };
+const SCENARIO_LABELS = {
+  1: 'Full Escalation — Hormuz Closed',
+  2: 'Status Quo — Active War',
+  3: 'Ceasefire / De-escalation',
+  4: 'Full Relief — Pre-War Levels',
+};
+let _activeScenario = null;
+let _scenarioCache  = {};
+
+function selectScenario(n) {
+  // Update tab active state
+  document.querySelectorAll('.sc-tab').forEach((el, i) => {
+    el.classList.toggle('active', i + 1 === n);
+  });
+  fetchScenarioPrediction(n);
+}
+
+async function fetchScenarioPrediction(scenario) {
+  if (_activeScenario === scenario && _scenarioCache[scenario]) {
+    renderScenarioResult(_scenarioCache[scenario]);
+    return;
+  }
+  _activeScenario = scenario;
+
+  const spinEl  = document.getElementById('sc-spin');
+  const badgeEl = document.getElementById('sc-scenario-badge');
+  const rangeEl = document.getElementById('sc-range');
+  const textEl  = document.getElementById('sc-text');
+  const refsEl  = document.getElementById('sc-refs');
+  const color   = SCENARIO_COLORS[scenario];
+
+  if (spinEl)  { spinEl.style.display = 'inline-block'; }
+  if (badgeEl) { badgeEl.textContent = SCENARIO_LABELS[scenario]; badgeEl.style.setProperty('--sc-badge-color', color); }
+  if (rangeEl) { rangeEl.textContent = '—'; rangeEl.style.color = color; }
+  if (textEl)  { textEl.textContent = 'Running AI analysis…'; textEl.style.color = '#334155'; }
+  if (refsEl)  { refsEl.innerHTML = ''; }
+
+  try {
+    const r = await fetch(`${BACKEND}/api/ai/scenario-prediction?scenario=${scenario}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    _scenarioCache[scenario] = d;
+    renderScenarioResult(d);
+  } catch (e) {
+    if (textEl)  textEl.textContent = 'Analysis unavailable. Check backend connection.';
+    if (textEl)  textEl.style.color = '#ef4444';
+    console.warn('fetchScenarioPrediction error', e);
+  } finally {
+    if (spinEl) spinEl.style.display = 'none';
+  }
+}
+
+function renderScenarioResult(d) {
+  const color   = d.scenario_color || SCENARIO_COLORS[d.scenario] || '#fbbf24';
+  const badgeEl = document.getElementById('sc-scenario-badge');
+  const rangeEl = document.getElementById('sc-range');
+  const textEl  = document.getElementById('sc-text');
+  const refsEl  = document.getElementById('sc-refs');
+
+  if (badgeEl) {
+    badgeEl.textContent = (d.scenario_label || SCENARIO_LABELS[d.scenario]) + ' · Brent Crude · 7-day';
+    badgeEl.style.setProperty('--sc-badge-color', color);
+    badgeEl.style.color = color;
+  }
+  if (rangeEl) {
+    // price_range already prefixed with "Brent" by server; fallback shows Brent spot
+    rangeEl.textContent = d.price_range || (d.brent_now ? `Brent $${d.brent_now}/bbl` : '7-day Brent outlook');
+    rangeEl.style.color = color;
+  }
+  if (textEl) {
+    textEl.textContent = '';
+    textEl.style.color = '#64748b';
+    typeWrite(textEl, d.insight || 'No forecast available.');
+  }
+  if (refsEl) {
+    const refs = d.refs || [];
+    refsEl.innerHTML = refs.map(ref => {
+      const url   = typeof ref === 'string' ? ref : ref.url;
+      const title = typeof ref === 'string'
+        ? url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]
+        : (ref.title || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]);
+      return `<a href="${url}" target="_blank" style="font-size:8px;color:${color};background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:2px 6px;text-decoration:none;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;display:inline-block;">${title}</a>`;
+    }).join('');
+  }
+}
+
+async function fetchAIPricePrediction() {
+  const spinEl   = document.getElementById('pp-spin');
+  const textEl   = document.getElementById('pp-text');
+  const rangeEl  = document.getElementById('pp-range');
+  const refsEl   = document.getElementById('pp-refs');
+  const updEl    = document.getElementById('pp-updated-30d');
+
+  if (spinEl) spinEl.style.display = 'inline-block';
+  if (textEl) textEl.textContent = 'Aggregating top news signals…';
+
+  try {
+    const r = await fetch(`${BACKEND}/api/ai/price-prediction`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+
+    const insight = d.insight || 'No forecast available.';
+
+    // Extract price range from insight text e.g. "Expected range: $70–$85/bbl"
+    if (rangeEl) {
+      const rangeMatch = insight.match(/Expected range[:\s]+(\$[\d.,]+[–\-—]+\$[\d.,]+\/bbl)/i);
+      rangeEl.textContent = rangeMatch ? rangeMatch[1] : (d.wti_now ? `WTI now: $${d.wti_now}` : '30-day forecast');
+    }
+
+    // Insight text (strip the range line from body to avoid duplication)
+    if (textEl) {
+      textEl.textContent = '';
+      const insightBody = insight.replace(/Expected range[:\s]+\$[\d.,]+[–\-—]+\$[\d.,]+\/bbl[.]*\n?/i, '').trim();
+      typeWrite(textEl, insightBody);
+    }
+
+    // Refs — server returns array of {title, url} objects or plain strings
+    if (refsEl) {
+      const refs = d.refs || [];
+      if (refs.length > 0) {
+        refsEl.innerHTML = refs.map(ref => {
+          const url   = typeof ref === 'string' ? ref : ref.url;
+          const title = typeof ref === 'string'
+            ? url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]
+            : (ref.title || url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]);
+          return `<a href="${url}" target="_blank" style="font-size:8px;color:#60a5fa;background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:4px;padding:2px 6px;text-decoration:none;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;display:inline-block;">${title}</a>`;
+        }).join('');
+      }
+    }
+
+    // Meta label
+    if (updEl) {
+      const now = new Date().toUTCString().slice(0, 17) + ' UTC';
+      updEl.textContent = `30-day forecast · Updated ${now}`;
+    }
+
+  } catch (e) {
+    if (textEl) textEl.textContent = 'Price analysis unavailable. Check backend connection.';
+    console.warn('fetchAIPricePrediction error', e);
+  } finally {
+    if (spinEl) spinEl.style.display = 'none';
+  }
+}
+
+// ─────────────────────────────────────────────
+// MAIN REFRESH
+// ─────────────────────────────────────────────
+async function fullRefresh(){
+  _stepIdx = 0;
+  document.getElementById('lpbar').style.width = '0%';
+  document.getElementById('loading').style.display='flex';
+
+  _allNewsHeadlines = [];   // reset for fresh fetch
+
+  // Fetch per-product stock breakdown (non-blocking, best-effort)
+  fetch(`${BACKEND}/api/product-stocks`)
+    .then(r => r.json())
+    .then(d => { if (d && d.countries) _productStocks = d.countries; })
+    .catch(() => {});  // silently ignore if backend offline
+
+  // Parallel: World Bank + EIA (independent)
+  await Promise.all([ fetchWorldBank(), fetchEIA() ]);
+
+  // GeoJSON choropleth (needs updated COUNTRIES data)
+  await loadChoropleth();
+
+  // GDELT (sequential — respects rate limit internally)
+  const gdelt = await fetchGDELT();
+
+  // NewsAPI via backend
+  await fetchNews();
+
+  // Render sidebar
+  renderCountryList();
+  updateStats();
+
+  // Refresh timestamps
+  const nowStr = new Date().toUTCString().slice(0,22)+' UTC';
+  document.getElementById('ts').textContent='Synced: '+nowStr;
+  const ft = document.getElementById('footer-ts');
+  if (ft) ft.textContent='Last sync: '+nowStr;
+  nxtT=Date.now()+86400000; tickCountdown();
+
+  // AI analysis (market sentiment)
+  typeWrite(document.getElementById('ait'), buildAnalysis(gdelt));
+
+  // Crude price ticker + AI panels (non-blocking)
+  fetchCrudePrice();
+  fetchAIPricePrediction();
+  // Auto-run scenario 2 (status quo) on first load; user can switch tabs
+  if (_activeScenario === null) selectScenario(2);
+
+  document.getElementById('lpbar').style.width = '100%';
+  setTimeout(() => { document.getElementById('loading').style.display='none'; }, 300);
+}
+
+// Boot
+fullRefresh();
+// Auto-refresh every 24h
+setInterval(fullRefresh, 86400000);
+</script>
+</body>
+</html>
