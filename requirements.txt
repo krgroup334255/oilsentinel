@@ -5,3 +5,4 @@ apscheduler
 openai
 yfinance
 gunicorn
+python-dotenv

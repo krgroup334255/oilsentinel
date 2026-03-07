@@ -32,6 +32,13 @@ import logging
 import threading
 from datetime import datetime, timezone
 
+# Load .env file when running locally (ignored in production where env vars are set directly)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import requests
 from flask import Flask, jsonify, abort, request as flask_request
 from flask_cors import CORS
@@ -39,9 +46,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from openai import OpenAI
 
 # ── Config ──────────────────────────────────────────────────────────────────
-EIA_API_KEY    = os.environ.get("EIA_API_KEY",    "urp3Kqvcq9MUq17WWTVmTRqHafsiYcuBegI413he")
-NEWS_API_KEY   = os.environ.get("NEWS_API_KEY",   "a162e961e90e427593c875ec3877affd")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "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")
+EIA_API_KEY    = os.environ.get("EIA_API_KEY",    "")
+NEWS_API_KEY   = os.environ.get("NEWS_API_KEY",   "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
