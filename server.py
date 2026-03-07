@@ -642,6 +642,42 @@ def news_geo():
         page_size=25
     ))
 
+@app.route("/api/gdelt")
+def gdelt_proxy():
+    """
+    Server-side proxy for GDELT API v2 doc search.
+    Accepts query params: q (query string), startdatetime, maxrecords.
+    GDELT does not send CORS headers so the browser cannot call it directly.
+    """
+    q             = flask_request.args.get("q", "oil+sanctions")
+    startdatetime = flask_request.args.get("startdatetime", "")
+    maxrecords    = flask_request.args.get("maxrecords", "10")
+
+    cache_key = f"gdelt_{q}_{startdatetime}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    url = (
+        "https://api.gdeltproject.org/api/v2/doc/doc"
+        f"?query={q}&mode=artlist&format=json"
+        f"&maxrecords={maxrecords}&sourcelang=english&sort=datedesc"
+    )
+    if startdatetime:
+        url += f"&startdatetime={startdatetime}"
+
+    try:
+        r = requests.get(url, timeout=REQUEST_TIMEOUT)
+        r.raise_for_status()
+        data = r.json()
+        # Short TTL for news (15 min)
+        _cache[cache_key] = {"ts": time.time() - (CACHE_TTL_SECONDS - PRICE_CACHE_TTL), "data": data}
+        return jsonify(data)
+    except Exception as e:
+        log.warning("GDELT proxy failed for q=%s: %s", q, e)
+        return jsonify({"articles": [], "error": str(e)}), 502
+
+
 @app.route("/api/summary")
 def summary():
     """All data in one call — used by the dashboard on startup."""

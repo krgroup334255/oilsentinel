@@ -950,7 +950,7 @@ body {
 // ─────────────────────────────────────────────
 // Change BACKEND to your Railway URL when deploying, e.g.:
 // const BACKEND = "https://your-app.up.railway.app";
-const BACKEND    = "http://localhost:5001";
+const BACKEND    = "https://oilsentinel-production.up.railway.app";
 const USE_BACKEND = true;
 
 // ─────────────────────────────────────────────
@@ -1644,13 +1644,18 @@ async function fetchGDELT() {
   }
   const startDate = gdeltDate(threeDaysAgo);
 
-  // Fire all GDELT queries in parallel with a 6s timeout each
+  // Fire all GDELT queries via backend proxy (avoids CORS block)
+  const gdeltBase = USE_BACKEND
+    ? `${BACKEND}/api/gdelt`
+    : null;
   const gdeltResults = await Promise.allSettled(
     GQ.map(q =>
-      fetch(
-        `https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&format=json&maxrecords=10&sourcelang=english&sort=datedesc&startdatetime=${startDate}`,
-        {signal:AbortSignal.timeout(6000)}
-      ).then(r=>r.json()).catch(e=>{ console.warn('GDELT q fail:', q, e); return null; })
+      gdeltBase
+        ? fetch(
+            `${gdeltBase}?q=${q}&maxrecords=10&startdatetime=${startDate}`,
+            {signal:AbortSignal.timeout(12000)}
+          ).then(r=>r.json()).catch(e=>{ console.warn('GDELT q fail:', q, e); return null; })
+        : Promise.resolve(null)
     )
   );
   gdeltResults.forEach(res=>{
