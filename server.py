@@ -48,9 +48,10 @@ from openai import OpenAI
 # ── Config ──────────────────────────────────────────────────────────────────
 EIA_API_KEY    = os.environ.get("EIA_API_KEY",    "")
 NEWS_API_KEY   = os.environ.get("NEWS_API_KEY",   "")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip().lstrip("=")
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
+log_key_preview = OPENAI_API_KEY[:8] + "..." if OPENAI_API_KEY else "NOT SET"
 
 EIA_BASE  = "https://api.eia.gov/v2"
 NEWS_BASE = "https://newsapi.org/v2"
@@ -60,6 +61,7 @@ REQUEST_TIMEOUT   = 15              # seconds
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
+log.info(f"OPENAI_API_KEY loaded: {log_key_preview}")
 
 app = Flask(__name__)
 CORS(app)   # allow all origins (dashboard HTML served locally)
