@@ -751,6 +751,7 @@ def ai_country_insight():
         f"from 28th February 2026 to now and due to closure of hormuz strait. "
         f"Get information the new source, potential barrels being sourced and if its concluded or "
         f"when its expected to be concluded and stage of the negotiation. "
+        f"Respond in English only, regardless of the country. "
         f"Summarize the details in less than 100 words in a single paragraph. "
         f"At the very end of your response, on a new line, output a JSON array of up to 3 reference URLs "
         f"as: REFS:[{{\"title\":\"...\",\"url\":\"...\"}},...] "
