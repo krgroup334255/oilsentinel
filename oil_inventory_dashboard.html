@@ -22,20 +22,30 @@ body {
 
 /* ── HEADER ── */
 #header {
-  min-height: 64px;
   background: rgba(15,23,42,.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid #1e293b;
-  padding: 8px 20px;
+  padding: 6px 20px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   position: relative;
   z-index: 1000;
   flex-shrink: 0;
+}
+#header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+#header-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding-bottom: 4px;
 }
 #header-brand { display:flex; align-items:center; gap:12px; }
 #brand-icon {
@@ -57,7 +67,7 @@ body {
 }
 
 /* Header stat chips */
-#stats { display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex:1; justify-content:center; }
+#stats { display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:center; }
 .sb {
   background: rgba(30,41,59,.7);
   border: 1px solid #1e293b;
@@ -743,44 +753,48 @@ body {
 </div>
 
 <div id="header">
-  <div id="header-brand">
-    <div id="brand-icon">🛡️</div>
-    <div id="brand-text">
-      <h1>Oil Sentinel <span id="brand-tag">PRO</span></h1>
-      <div class="sub">Real-time Global Energy Intelligence</div>
-    </div>
-  </div>
-  <div id="stats">
-    <div class="sb green" ><div class="v" id="g-inv">—</div><div class="l">Global Fuel Inventory</div></div>
-    <div class="sb"       ><div class="v" id="g-use">—</div><div class="l">Global Daily Usage</div></div>
-    <div class="sb amber hormuz-dynamic" id="g-prod-chip"><div class="v" id="g-prod">—</div><div class="l">Global Daily Production</div></div>
-    <div class="sb cyan"  ><div class="v" id="g-flt">—</div><div class="l">Floating Tankers &amp; Depots</div></div>
-    <div class="sb red"   ><div class="v" id="g-cri">—</div><div class="l">Critical Risk Zones</div></div>
-    <div class="sb"       ><div class="v" id="g-sig">—</div><div class="l">Live Signals (3d)</div></div>
-  </div>
-  <!-- Hormuz Closure Simulator — nestled in header -->
-  <div id="hormuz-panel">
-    <div id="hormuz-head" onclick="toggleHormuz()">
-      <div class="hp-label">⚠ Hormuz Closure Simulator</div>
-      <div id="hormuz-badge">ACTIVE</div>
-      <span id="hp-toggle-icon" class="hp-toggle">▼</span>
-    </div>
-    <div id="hormuz-body" class="collapsed">
-      <div class="hp-sub">~21% of global oil transits this chokepoint daily</div>
-      <div id="hormuz-slider-row">
-        <input id="hormuz-sel" type="range" min="5" max="30" step="1" value="5"
-               oninput="applyHormuzClosure()" style="--pct:0%">
-        <span id="hormuz-day-lbl">5 days</span>
-        <button id="hormuz-reset" onclick="resetHormuzClosure()">✕ Reset</button>
+  <div id="header-top">
+    <div id="header-brand">
+      <div id="brand-icon">🛡️</div>
+      <div id="brand-text">
+        <h1>Oil Sentinel <span id="brand-tag">PRO</span></h1>
+        <div class="sub">Real-time Global Energy Intelligence</div>
       </div>
     </div>
-  </div>
+    <div id="hormuz-panel">
+      <div id="hormuz-head" onclick="toggleHormuz()">
+        <div class="hp-label">⚠ Hormuz Closure Simulator</div>
+        <div id="hormuz-badge">ACTIVE</div>
+        <span id="hp-toggle-icon" class="hp-toggle">▼</span>
+      </div>
+      <div id="hormuz-body" class="collapsed">
+        <div class="hp-sub">~21% of global oil transits this chokepoint daily</div>
+        <div id="hormuz-slider-row">
+          <input id="hormuz-sel" type="range" min="5" max="30" step="1" value="5"
+                 oninput="applyHormuzClosure()" style="--pct:0%">
+          <span id="hormuz-day-lbl">5 days</span>
+          <button id="hormuz-reset" onclick="resetHormuzClosure()">✕ Reset</button>
+        </div>
+      </div>
+    </div>
 
-  <div id="rinfo">
-    <span class="ts" id="ts">Connecting…</span>
-    <span id="nxt"></span>
-    <button id="rbtn" onclick="fullRefresh()">↺ Sync</button>
-  </div>
+    <div id="rinfo">
+      <span class="ts" id="ts">Connecting…</span>
+      <span id="nxt"></span>
+      <button id="rbtn" onclick="fullRefresh()">↺ Sync</button>
+    </div>
+  </div><!-- end #header-top -->
+
+  <div id="header-bottom">
+    <div id="stats">
+      <div class="sb green" ><div class="v" id="g-inv">—</div><div class="l">Global Fuel Inventory</div></div>
+      <div class="sb"       ><div class="v" id="g-use">—</div><div class="l">Global Daily Usage</div></div>
+      <div class="sb amber hormuz-dynamic" id="g-prod-chip"><div class="v" id="g-prod">—</div><div class="l">Global Daily Production</div></div>
+      <div class="sb cyan"  ><div class="v" id="g-flt">—</div><div class="l">Floating Tankers &amp; Depots</div></div>
+      <div class="sb red"   ><div class="v" id="g-cri">—</div><div class="l">Critical Risk Zones</div></div>
+      <div class="sb"       ><div class="v" id="g-sig">—</div><div class="l">Live Signals (3d)</div></div>
+    </div>
+  </div><!-- end #header-bottom -->
 </div>
 
 <div id="layout">
