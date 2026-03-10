@@ -22,15 +22,17 @@ body {
 
 /* ── HEADER ── */
 #header {
-  height: 64px;
+  min-height: 64px;
   background: rgba(15,23,42,.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid #1e293b;
-  padding: 0 20px;
+  padding: 8px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   position: relative;
   z-index: 1000;
   flex-shrink: 0;
@@ -55,7 +57,7 @@ body {
 }
 
 /* Header stat chips */
-#stats { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+#stats { display:flex; gap:6px; align-items:center; flex-wrap:wrap; flex:1; justify-content:center; }
 .sb {
   background: rgba(30,41,59,.7);
   border: 1px solid #1e293b;
