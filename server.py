@@ -979,7 +979,8 @@ SCENARIO_DEFS = {
             " proxy forces across the region, tankers are attacked in the Arabian Sea and"
             " Red Sea, the Strait of Hormuz is fully closed to commercial traffic."
             " Global oil supply loses 20–25% of seaborne crude. OPEC cannot compensate."
-            " SPR releases are announced but insufficient."
+            " IEA record reserve release (announced March 2026) proves insufficient to"
+            " offset supply shock. SPR drawdowns slow the spike but cannot cap prices."
         ),
     },
     2: {
@@ -989,7 +990,9 @@ SCENARIO_DEFS = {
             "Situation remains as of today: Iran and the US continue exchanging heavy"
             " missile and drone strikes. The Strait of Hormuz is partially operational"
             " (50–70% normal throughput). Global production is flat or marginally lower."
-            " Risk premium persists. OPEC output unchanged. Some SPR drawdowns."
+            " Risk premium persists. OPEC output unchanged."
+            " IEA has proposed a record emergency reserves release (March 11 2026) to"
+            " stabilise prices — market assessing whether this is sufficient."
         ),
     },
     3: {
@@ -999,7 +1002,8 @@ SCENARIO_DEFS = {
             "A ceasefire is agreed through mediation (Qatar/Oman/UN). Strait of Hormuz"
             " reopens to full commercial traffic within 2 weeks. Iranian and Gulf exports"
             " resume. Global supply gradually restores to pre-war levels."
-            " Risk premium deflates. OPEC+ maintains current output."
+            " IEA record reserve release (March 2026) combines with ceasefire to"
+            " significantly deflate the war risk premium. OPEC+ maintains current output."
         ),
     },
     4: {
@@ -1008,6 +1012,7 @@ SCENARIO_DEFS = {
         "desc": (
             "Complete ceasefire and diplomatic resolution. All sanctions eased."
             " Strait of Hormuz fully operational. Iranian crude re-enters market."
+            " IEA record reserve release (March 2026) floods market with additional supply."
             " Global production returns to and exceeds pre-war levels with Saudi/UAE"
             " output increase. Demand returns to pre-war trajectory. Risk premium gone."
         ),
@@ -1060,13 +1065,14 @@ def ai_scenario_prediction():
         f"  - Weighted daily average since Feb 28 (de-escalation days down-weighted): ${brent_wavg}/bbl\n"
         f"  - WTI spot (reference only): ${wti_now}/bbl\n\n"
         f"Search for the top 10 most recent BRENT crude oil price predictions and energy news "
-        f"(Reuters, Bloomberg, EIA, IEA, OPEC, S&P Global, Argus Media, ICE) from after Feb 28 2026.\n\n"
+        f"(Reuters, Bloomberg, EIA, IEA, OPEC, S&P Global, Argus Media, ICE) from after Feb 28 2026.\n"
+        f"Also specifically search for: 'IEA record reserves release March 2026' and its impact on oil prices.\n\n"
         f"Now assume the following scenario for the NEXT 7 DAYS:\n"
         f"SCENARIO {scenario_id} — {sc['label'].upper()}: {sc['desc']}\n\n"
-        f"Based on the top 10 Brent news signals AND the above scenario assumptions, give a concise "
-        f"7-day BRENT crude price outlook (under 100 words). "
-        f"Factor in: war risk premium, OPEC response, SPR releases, demand destruction, "
-        f"shipping insurance costs, ICE Brent futures positioning. "
+        f"Based on the top 10 Brent news signals, the IEA reserve release news, AND the above scenario "
+        f"assumptions, give a concise 7-day BRENT crude price outlook (under 100 words). "
+        f"Factor in: war risk premium, IEA emergency reserve release impact, OPEC response, "
+        f"SPR releases, demand destruction, shipping insurance costs, ICE Brent futures positioning. "
         f"The forecast range MUST be for BRENT CRUDE. "
         f"End your response with EXACTLY one line in this format: "
         f"'Expected Brent range: $X–$Y/bbl (7-day)'. "
