@@ -1339,7 +1339,7 @@ function renderSirenMarkers() {
         <div class="pr"><span>Imported Oil</span><span class="pv">${c.imports_kbd > 0 ? (c.imports_kbd/1000).toFixed(2)+' M bbl/day ('+impDep+'% of needs)' : 'Net exporter'}</span></div>
         <div class="pr"><span>Daily Supply Gap</span><span class="pv" style="color:${domGap>0?'#ff8040':'#4ade80'}">${domGap > 0 ? (domGap/1000).toFixed(2)+' M bbl/day shortfall' : 'Self-sufficient / surplus'}</span></div>
         <div class="pr"><span>Strategic Reserve</span><span class="pv" style="font-size:8px;color:#4a7a9a">${c.nearest_spr}</span></div>
-        <div class="pr"><span>Data Source</span><span class="pv" style="color:#334155">${c._eia_live?'EIA (live)':c._wb_updated?'World Bank':'IEA / BP baseline'}</span></div>
+        <div class="pr"><span>Data Source</span><span class="pv" style="color:#334155">${c._eia_live?'EIA (live)':c._jodi_live?'JODI (live)':c._wb_updated?'World Bank':'IEA / BP baseline'}</span></div>
         <div class="pb"><div class="pbar" style="width:${bar}%;background:${col}"></div></div>
         <div class="pl">Bar = stockpile vs 90-day IEA emergency benchmark · assumes all imports stop</div>
         <div class="ai-section">
@@ -1558,6 +1558,59 @@ async function fetchWorldBank() {
     });
     console.log(`WB updated ${n} countries`);
   } catch(e) { console.warn('WB failed:', e); }
+}
+
+// ─────────────────────────────────────────────
+// JODI — live production / consumption / imports
+// ─────────────────────────────────────────────
+async function fetchCountryFlows() {
+  if (!USE_BACKEND) return;
+  setStep('JODI: fetching live country production & consumption…');
+  try {
+    const r = await fetch(`${BACKEND}/api/country-flows`, {signal: AbortSignal.timeout(30000)});
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    const countries = data.countries || {};
+    let n = 0;
+    COUNTRIES.forEach(c => {
+      const flow = countries[c.iso3];
+      if (!flow) return;
+      let updated = false;
+      // Production: accept if plausible (within 20%–300% of baseline, or baseline is 0)
+      if (flow.production_kbd != null) {
+        const base = c.production_kbd || 0;
+        const ratio = base > 0 ? flow.production_kbd / base : 1;
+        if (base === 0 || (ratio >= 0.20 && ratio <= 3.0)) {
+          c.production_kbd = flow.production_kbd;
+          updated = true;
+        }
+      }
+      // Consumption: accept if plausible (within 30%–250% of baseline)
+      if (flow.consumption_kbd != null && flow.consumption_kbd > 50) {
+        const base = c.consumption_kbd || 0;
+        const ratio = base > 0 ? flow.consumption_kbd / base : 1;
+        if (base === 0 || (ratio >= 0.30 && ratio <= 2.50)) {
+          c.consumption_kbd = flow.consumption_kbd;
+          updated = true;
+        }
+      }
+      // Imports: accept if plausible
+      if (flow.imports_kbd != null && flow.imports_kbd >= 0) {
+        const base = c.imports_kbd || 0;
+        const ratio = base > 0 ? flow.imports_kbd / base : 1;
+        if (base === 0 || (ratio >= 0.10 && ratio <= 4.0)) {
+          c.imports_kbd = flow.imports_kbd;
+          updated = true;
+        }
+      }
+      if (updated) {
+        c.days = computeDays(c.stocks_mb, c.consumption_kbd, c.production_kbd, c.imports_kbd);
+        c._jodi_live = true;
+        n++;
+      }
+    });
+    console.log(`JODI flows updated ${n} countries`);
+  } catch(e) { console.warn('JODI flows failed:', e); }
 }
 
 // ─────────────────────────────────────────────
@@ -2432,8 +2485,8 @@ async function fullRefresh(){
     .then(d => { if (d && d.countries) _productStocks = d.countries; })
     .catch(() => {});  // silently ignore if backend offline
 
-  // Parallel: World Bank + EIA (independent)
-  await Promise.all([ fetchWorldBank(), fetchEIA() ]);
+  // Parallel: World Bank + EIA + JODI flows (independent)
+  await Promise.all([ fetchWorldBank(), fetchEIA(), fetchCountryFlows() ]);
 
   // GeoJSON choropleth (needs updated COUNTRIES data)
   await loadChoropleth();
@@ -2444,8 +2497,9 @@ async function fullRefresh(){
   // NewsAPI via backend
   await fetchNews();
 
-  // Render sidebar
+  // Render sidebar + map with live data
   renderCountryList();
+  renderSirenMarkers();
   updateStats();
 
   // Refresh timestamps

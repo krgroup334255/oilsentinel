@@ -55,8 +55,9 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY)
 EIA_BASE  = "https://api.eia.gov/v2"
 NEWS_BASE = "https://newsapi.org/v2"
 
-CACHE_TTL_SECONDS = 24 * 60 * 60   # 24 hours
-REQUEST_TIMEOUT   = 15              # seconds
+CACHE_TTL_SECONDS        = 24 * 60 * 60   # 24 hours
+CACHE_TTL_FLOWS_SECONDS  =  6 * 60 * 60   # 6 hours for production/consumption/imports
+REQUEST_TIMEOUT          = 15              # seconds
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -454,6 +455,139 @@ def _parse_jodi_csv(csv_text, product_map):
         log.warning("JODI CSV parse error: %s", e)
     return rows_by_cp
 
+
+def _parse_jodi_flows_csv(csv_text):
+    """
+    Parse JODI CSV for flow data (production, consumption, imports).
+    FLOW_BREAKDOWN codes:
+      PRODREFIN  = refinery production (output of refined products)
+      TOTPROD    = total production (crude + NGL)
+      DEMAND     = total inland demand / consumption
+      IMTOTAL    = total imports
+    UNIT_MEASURE = KBBL (thousand barrels) or KBBLDAY (thousand barrels/day)
+    Returns { iso3: { production_kbd, consumption_kbd, imports_kbd } }
+    """
+    FLOW_MAP = {
+        "TOTPROD":   "production_kbd",
+        "DEMAND":    "consumption_kbd",
+        "IMTOTAL":   "imports_kbd",
+    }
+    # Accumulate latest period per country+flow
+    rows = {}   # (iso3, flow) -> {period -> value_kbd}
+    try:
+        reader = csv.DictReader(io.StringIO(csv_text))
+        for row in reader:
+            flow = row.get("FLOW_BREAKDOWN", "").strip()
+            field = FLOW_MAP.get(flow)
+            if not field:
+                continue
+            unit = row.get("UNIT_MEASURE", "").strip()
+            raw_val = row.get("OBS_VALUE", "").strip()
+            if raw_val in ("", "-", "x"):
+                continue
+            try:
+                val = float(raw_val)
+            except ValueError:
+                continue
+            # Normalise to kbd
+            if unit == "KBBL":
+                val = val / 30.0   # monthly kbbl → kbd approx
+            elif unit == "KBBLDAY":
+                pass               # already kbd
+            else:
+                continue
+            iso2 = row.get("REF_AREA", "").strip().upper()
+            iso3 = JODI_ISO2_TO_ISO3.get(iso2)
+            if not iso3:
+                continue
+            period = row.get("TIME_PERIOD", "").strip()
+            key = (iso3, field)
+            if key not in rows:
+                rows[key] = {}
+            rows[key][period] = val
+    except Exception as e:
+        log.warning("JODI flows CSV parse error: %s", e)
+
+    # Pick latest period per country+flow
+    result = {}
+    for (iso3, field), periods in rows.items():
+        if not periods:
+            continue
+        val = periods[sorted(periods.keys())[-1]]
+        if iso3 not in result:
+            result[iso3] = {}
+        result[iso3][field] = round(val, 1)
+    return result
+
+
+def fetch_jodi_country_flows():
+    """
+    Fetch JODI production, consumption and imports flows for 90+ countries.
+    Uses both primary (crude) and secondary (products) CSVs.
+    Returns { iso3: { production_kbd, consumption_kbd, imports_kbd, source, period } }
+    Cached for 6 hours.
+    """
+    key = "jodi_country_flows"
+    cached = _cache_get(key)
+    if cached and (time.time() - _cache[key]["ts"]) < CACHE_TTL_FLOWS_SECONDS:
+        return cached
+
+    year = datetime.now(timezone.utc).year
+    merged = {}
+
+    for csv_type in ["primary", "secondary"]:
+        r = None
+        for y in [year, year - 1]:
+            url = (f"https://www.jodidata.org/_resources/files/downloads/oil-data"
+                   f"/annual-csv/{csv_type}/{y}.csv")
+            try:
+                r = requests.get(url, timeout=60)
+                if r.status_code == 200:
+                    log.info("JODI flows %s/%d CSV downloaded (%d bytes)", csv_type, y, len(r.content))
+                    break
+                else:
+                    r = None
+            except Exception as e:
+                log.warning("JODI flows %s/%d failed: %s", csv_type, y, e)
+                r = None
+        if r is None:
+            continue
+
+        flows = _parse_jodi_flows_csv(r.text)
+        for iso3, vals in flows.items():
+            if iso3 not in merged:
+                merged[iso3] = {}
+            # secondary overrides primary for demand/imports (better coverage)
+            merged[iso3].update(vals)
+
+    # Basic plausibility filter — discard obviously wrong values
+    clean = {}
+    for iso3, vals in merged.items():
+        entry = {}
+        prod = vals.get("production_kbd", 0)
+        cons = vals.get("consumption_kbd", 0)
+        imps = vals.get("imports_kbd", 0)
+        if prod >= 0 and prod < 30000:
+            entry["production_kbd"] = prod
+        if cons > 50 and cons < 40000:
+            entry["consumption_kbd"] = cons
+        if imps >= 0 and imps < 30000:
+            entry["imports_kbd"] = imps
+        if entry:
+            entry["source"] = "JODI"
+            clean[iso3] = entry
+
+    out = {
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "source": "JODI Oil Database",
+        "frequency": "monthly",
+        "countries": clean,
+    }
+    _cache_set(key, out)
+    log.info("JODI country flows fetched for %d countries", len(clean))
+    return out
+
+
 def fetch_jodi_product_stocks():
     """
     Download JODI Oil primary + secondary CSVs and extract closing stocks.
@@ -698,6 +832,16 @@ def summary():
 def product_stocks():
     """Per-product petroleum stock breakdown for all countries."""
     return jsonify(fetch_all_product_stocks())
+
+@app.route("/api/country-flows")
+def country_flows():
+    """
+    Live production, consumption and imports flows per country from JODI.
+    Used by the frontend to update the COUNTRIES array with real data
+    instead of hardcoded IEA/BP baselines.
+    Returns { fetched_at, countries: { iso3: { production_kbd, consumption_kbd, imports_kbd, source } } }
+    """
+    return jsonify(fetch_jodi_country_flows())
 
 @app.route("/api/cache/status")
 def cache_status():
@@ -1249,6 +1393,7 @@ def scheduled_refresh():
     fetch_eia_us_consumption()
     fetch_eia_imports()
     fetch_all_product_stocks()
+    fetch_jodi_country_flows()   # live production/consumption/imports per country
     fetch_crude_price()
     fetch_oil_news()
     fetch_oil_news(
