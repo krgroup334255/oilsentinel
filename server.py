@@ -1429,6 +1429,91 @@ def ai_price_prediction():
         return jsonify({"insight": None, "refs": [], "error": str(e)}), 500
 
 
+@app.route("/api/ai/fuel-crisis-scan")
+def ai_fuel_crisis_scan():
+    """
+    AI news scan: which countries have reported fuel shortages, rationing,
+    outages or critical supply failures since the Iran-US war started (Feb 28 2026).
+    Cached 2 hours.
+    """
+    import json as _json, re as _re
+    cache_key = "ai_fuel_crisis_scan"
+    entry = _cache.get(cache_key)
+    if entry and (time.time() - entry["ts"]) < 7200:
+        log.info("Fuel crisis scan served from cache")
+        return jsonify(entry["data"])
+
+    now = datetime.now(timezone.utc)
+    days_elapsed = max(0, (now - WAR_START_DATE).days)
+
+    prompt = (
+        f"Search for news from after 28th February 2026 about countries experiencing "
+        f"fuel shortages, fuel rationing, fuel outages, petrol queues, diesel shortages, "
+        f"energy crises or critical oil supply failures due to the Iran-US war and "
+        f"Strait of Hormuz disruption. Today is {now.strftime('%B %d, %Y')} "
+        f"({days_elapsed} days since the war started). "
+        f"For each affected country found, provide: country name, severity "
+        f"(critical/severe/moderate), what fuel type is affected, and a one-line summary. "
+        f"Respond in English only. Format your response as a JSON array: "
+        f"CRISIS:[{{\"country\":\"...\",\"iso3\":\"...\",\"severity\":\"critical|severe|moderate\","
+        f"\"fuel_type\":\"...\",\"summary\":\"...\"}},...] "
+        f"followed by REFS:[{{\"title\":\"...\",\"url\":\"...\"}},...] with up to 5 real URLs. "
+        f"If no confirmed shortages are found, return CRISIS:[] with an explanation."
+    )
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-search-preview",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=800,
+        )
+        raw = response.choices[0].message.content.strip()
+
+        crisis_list = []
+        refs = []
+        explanation = ""
+
+        if "CRISIS:" in raw:
+            parts = raw.split("CRISIS:", 1)
+            explanation = parts[0].strip()
+            remainder = parts[1].strip()
+            if "REFS:" in remainder:
+                crisis_part, refs_part = remainder.split("REFS:", 1)
+            else:
+                crisis_part, refs_part = remainder, "[]"
+            try:
+                crisis_list = _json.loads(crisis_part.strip())
+                if not isinstance(crisis_list, list):
+                    crisis_list = []
+            except Exception:
+                crisis_list = []
+            try:
+                refs = _json.loads(refs_part.strip())
+                if not isinstance(refs, list):
+                    refs = []
+            except Exception:
+                refs = []
+        else:
+            explanation = raw
+
+        out = {
+            "days_elapsed":  days_elapsed,
+            "crisis_count":  len(crisis_list),
+            "countries":     crisis_list,
+            "explanation":   explanation,
+            "refs":          refs,
+            "generated_at":  now.isoformat(),
+            "model":         "gpt-4o-search-preview",
+        }
+        _cache[cache_key] = {"ts": time.time(), "data": out}
+        log.info("Fuel crisis scan completed — %d countries affected", len(crisis_list))
+        return jsonify(out)
+
+    except Exception as e:
+        log.warning("Fuel crisis scan failed: %s", e)
+        return jsonify({"crisis_count": 0, "countries": [], "error": str(e)}), 500
+
+
 # ── Background scheduler ──────────────────────────────────────────────────────
 def scheduled_refresh():
     log.info("Scheduled daily refresh starting…")

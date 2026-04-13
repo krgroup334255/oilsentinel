@@ -893,6 +893,18 @@ body {
         <div id="pp-refs"></div>
       </div>
 
+      <!-- ── FUEL CRISIS SCAN ── -->
+      <div id="crisis-panel" style="border-bottom:1px solid #1e293b;padding:10px 14px 12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:9px;font-weight:800;color:#f87171;text-transform:uppercase;letter-spacing:.6px;">
+            🚨 Fuel Crisis Scanner
+          </span>
+          <span id="crisis-meta" style="font-size:7.5px;color:#334155;">AI · GPT-4o Search</span>
+        </div>
+        <div id="crisis-list" style="font-size:8.5px;color:#475569;">Scanning for fuel shortages…</div>
+        <div id="crisis-refs" style="margin-top:6px;"></div>
+      </div>
+
       <div id="aip">
         <div id="aip-header">
           <span class="al">🤖 AI Market Sentiment</span>
@@ -2528,6 +2540,67 @@ async function fetchAIPricePrediction() {
 }
 
 // ─────────────────────────────────────────────
+// FUEL CRISIS SCANNER
+// ─────────────────────────────────────────────
+async function fetchFuelCrisisScan() {
+  if (!USE_BACKEND) return;
+  const listEl = document.getElementById('crisis-list');
+  const refsEl = document.getElementById('crisis-refs');
+  const metaEl = document.getElementById('crisis-meta');
+  if (!listEl) return;
+  listEl.innerHTML = '<span style="color:#475569">Scanning news for fuel shortages…</span>';
+
+  try {
+    const r = await fetch(`${BACKEND}/api/ai/fuel-crisis-scan`, {signal: AbortSignal.timeout(60000)});
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+
+    if (metaEl) metaEl.textContent = `${data.crisis_count} countries affected · GPT-4o Search`;
+
+    if (!data.countries || data.countries.length === 0) {
+      listEl.innerHTML = `<span style="color:#4ade80">No confirmed fuel shortages found in latest news.</span>`;
+      return;
+    }
+
+    const SEVERITY_COLOR = { critical: '#f87171', severe: '#fb923c', moderate: '#fbbf24' };
+    const rows = data.countries.map(c => {
+      const col = SEVERITY_COLOR[c.severity] || '#94a3b8';
+      // Also flag this country on the map if we can find it
+      const country = COUNTRIES.find(x => x.iso3 === c.iso3 || x.name.toLowerCase() === c.country.toLowerCase());
+      if (country) { country._fuel_crisis = c.severity; }
+      return `<div style="padding:5px 0;border-bottom:1px solid #1e293b20;">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:${col};flex-shrink:0;display:inline-block"></span>
+          <span style="font-weight:700;color:#e2e8f0;font-size:8.5px;">${c.country}</span>
+          <span style="font-size:7px;color:${col};text-transform:uppercase;font-weight:700;">${c.severity}</span>
+          <span style="font-size:7px;color:#475569;margin-left:auto;">${c.fuel_type||''}</span>
+        </div>
+        <div style="color:#94a3b8;font-size:8px;padding-left:12px;">${c.summary||''}</div>
+      </div>`;
+    }).join('');
+    listEl.innerHTML = rows;
+
+    // Re-render map to show crisis markers
+    renderSirenMarkers();
+
+    // Refs
+    if (data.refs && data.refs.length && refsEl) {
+      refsEl.innerHTML = data.refs.map(r =>
+        `<a href="${r.url}" target="_blank" rel="noopener"
+            style="display:inline-block;font-size:7.5px;color:#3b82f6;
+                   background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);
+                   border-radius:4px;padding:2px 6px;margin:2px 2px 0 0;text-decoration:none;
+                   white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;"
+        >${r.title.slice(0,22)}${r.title.length>22?'…':''}</a>`
+      ).join('');
+    }
+  } catch(e) {
+    if (listEl) listEl.innerHTML = '<span style="color:#475569">Crisis scan unavailable.</span>';
+    console.warn('Fuel crisis scan failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
 // MAIN REFRESH
 // ─────────────────────────────────────────────
 async function fullRefresh(){
@@ -2576,6 +2649,7 @@ async function fullRefresh(){
   // Crude price ticker + AI panels (non-blocking)
   fetchCrudePrice();
   fetchAIPricePrediction();
+  fetchFuelCrisisScan();   // AI news scan — non-blocking, updates crisis panel async
   // Auto-run scenario 2 (status quo) on first load; user can switch tabs
   if (_activeScenario === null) selectScenario(2);
 
