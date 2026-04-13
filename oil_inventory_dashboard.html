@@ -836,6 +836,26 @@ body {
     <!-- Tab: Analysis -->
     <div id="panel-analysis" class="sb-panel">
 
+      <!-- ── WEEKLY STOCKPILE ASSESSMENT ── -->
+      <div id="weekly-panel" style="padding:10px 14px 12px;border-bottom:1px solid #1e293b;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:9px;font-weight:800;color:#a78bfa;text-transform:uppercase;letter-spacing:.6px;">
+            📋 Weekly Stockpile Assessment
+          </span>
+          <span id="weekly-meta" style="font-size:7.5px;color:#334155;">GPT-4o · Updated Mondays</span>
+        </div>
+        <!-- Severity summary chips -->
+        <div id="weekly-chips" style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;"></div>
+        <!-- Country lists -->
+        <div id="weekly-critical" style="margin-bottom:6px;"></div>
+        <div id="weekly-severe"   style="margin-bottom:6px;"></div>
+        <!-- AI narrative -->
+        <div id="weekly-text" style="font-size:8.5px;color:#94a3b8;line-height:1.6;">
+          Loading weekly assessment…
+        </div>
+        <div id="weekly-refs" style="margin-top:6px;"></div>
+      </div>
+
       <!-- ── CRUDE OIL SCENARIO PRICE PREDICTION ── -->
       <div id="price-pred-panel">
         <div id="price-pred-header">
@@ -2540,6 +2560,78 @@ async function fetchAIPricePrediction() {
 }
 
 // ─────────────────────────────────────────────
+// WEEKLY STOCKPILE ASSESSMENT
+// ─────────────────────────────────────────────
+async function fetchWeeklyAssessment() {
+  if (!USE_BACKEND) return;
+  const textEl   = document.getElementById('weekly-text');
+  const chipsEl  = document.getElementById('weekly-chips');
+  const critEl   = document.getElementById('weekly-critical');
+  const sevEl    = document.getElementById('weekly-severe');
+  const refsEl   = document.getElementById('weekly-refs');
+  const metaEl   = document.getElementById('weekly-meta');
+  if (!textEl) return;
+
+  try {
+    const r = await fetch(`${BACKEND}/api/ai/weekly-assessment`, {signal: AbortSignal.timeout(90000)});
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+
+    if (metaEl) metaEl.textContent = `Week ${d.week_number} · Day ${d.days_elapsed} · Hormuz ${d.hormuz_pct}% closed`;
+
+    // Severity chips
+    if (chipsEl) {
+      chipsEl.innerHTML = [
+        d.critical_count ? `<span style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">🔴 ${d.critical_count} Critical</span>` : '',
+        d.severe_count   ? `<span style="background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.3);color:#fb923c;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">🟠 ${d.severe_count} Severe</span>` : '',
+        d.moderate_count ? `<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);color:#fbbf24;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">🟡 ${d.moderate_count} Moderate</span>` : '',
+      ].join('');
+    }
+
+    // Critical country list
+    const renderCountries = (list, color) => list.map(c =>
+      `<span style="display:inline-flex;align-items:center;gap:3px;font-size:7.5px;
+        color:${color};background:rgba(0,0,0,.2);border:1px solid ${color}33;
+        border-radius:4px;padding:1px 5px;margin:1px;">
+        ${c.iso3} <span style="color:#64748b">${c.days}d</span>
+      </span>`
+    ).join('');
+
+    if (critEl && d.critical && d.critical.length) {
+      critEl.innerHTML = `<div style="font-size:7.5px;color:#f87171;font-weight:700;margin-bottom:3px;">CRITICAL — under 14 days:</div>`
+        + renderCountries(d.critical, '#f87171');
+    } else if (critEl) critEl.innerHTML = '';
+
+    if (sevEl && d.severe && d.severe.length) {
+      sevEl.innerHTML = `<div style="font-size:7.5px;color:#fb923c;font-weight:700;margin:4px 0 3px;">SEVERE — 14–45 days:</div>`
+        + renderCountries(d.severe, '#fb923c');
+    } else if (sevEl) sevEl.innerHTML = '';
+
+    // AI narrative
+    if (textEl && d.assessment) {
+      textEl.style.color = '#94a3b8';
+      typeWrite(textEl, d.assessment);
+    }
+
+    // Refs
+    if (refsEl && d.refs && d.refs.length) {
+      refsEl.innerHTML = d.refs.map(r =>
+        `<a href="${r.url}" target="_blank" rel="noopener"
+            style="display:inline-block;font-size:7.5px;color:#a78bfa;
+                   background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2);
+                   border-radius:4px;padding:2px 6px;margin:2px 2px 0 0;text-decoration:none;
+                   white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;"
+        >${r.title.slice(0,24)}${r.title.length>24?'…':''}</a>`
+      ).join('');
+    }
+
+  } catch(e) {
+    if (textEl) textEl.textContent = 'Weekly assessment unavailable.';
+    console.warn('Weekly assessment failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
 // FUEL CRISIS SCANNER
 // ─────────────────────────────────────────────
 async function fetchFuelCrisisScan() {
@@ -2649,6 +2741,7 @@ async function fullRefresh(){
   // Crude price ticker + AI panels (non-blocking)
   fetchCrudePrice();
   fetchAIPricePrediction();
+  fetchWeeklyAssessment(); // weekly stockpile assessment — non-blocking, cached 7 days
   fetchFuelCrisisScan();   // AI news scan — non-blocking, updates crisis panel async
   // Auto-run scenario 2 (status quo) on first load; user can switch tabs
   if (_activeScenario === null) selectScenario(2);

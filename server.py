@@ -1514,6 +1514,199 @@ def ai_fuel_crisis_scan():
         return jsonify({"crisis_count": 0, "countries": [], "error": str(e)}), 500
 
 
+@app.route("/api/ai/weekly-assessment")
+def ai_weekly_assessment():
+    """
+    Weekly AI assessment of global oil stockpile status.
+    Uses war-impact model to compute adjusted days-of-supply per country,
+    then asks GPT-4o to analyse critical/severe cases and give a geopolitical outlook.
+    Cached 7 days (refreshed every Monday 08:00 UTC by scheduler).
+    """
+    import json as _json, re as _re
+
+    cache_key = "ai_weekly_assessment"
+    entry = _cache.get(cache_key)
+    WEEKLY_TTL = 7 * 24 * 60 * 60   # 7 days
+    if entry and (time.time() - entry["ts"]) < WEEKLY_TTL:
+        log.info("Weekly assessment served from cache")
+        return jsonify(entry["data"])
+
+    now = datetime.now(timezone.utc)
+    days_elapsed = max(0, (now - WAR_START_DATE).days)
+    week_number  = (days_elapsed // 7) + 1
+
+    # Compute Hormuz closure % (same formula as /api/war-status)
+    if days_elapsed <= 14:
+        hormuz_pct = min(30, days_elapsed * 2.1)
+    elif days_elapsed <= 30:
+        hormuz_pct = 30 + (days_elapsed - 14) * 1.6
+    elif days_elapsed <= 60:
+        hormuz_pct = 55 + (days_elapsed - 30) * 0.67
+    else:
+        hormuz_pct = min(75, 75 - (days_elapsed - 60) * 0.1)
+
+    consumption_surge = min(5.0, days_elapsed * 0.11) if days_elapsed <= 45 else max(3.0, 5.0 - (days_elapsed - 45) * 0.04)
+
+    # CTABLE baselines (iso3: [stocks_mb, cons_kbd, prod_kbd, imp_kbd])
+    # Pulled from JODI flows cache if available, else use hardcoded reference values
+    BASELINE = {
+        "USA": [1650,20100,13200,6900], "CHN": [1200,16300,4200,11000],
+        "IND": [102,5300,750,4800],     "JPN": [600,3100,10,3100],
+        "KOR": [260,2700,5,2700],       "DEU": [90,2200,60,2200],
+        "FRA": [80,1700,20,1700],       "SAU": [500,3700,12000,0],
+        "RUS": [280,3700,10500,0],      "ARE": [250,1100,4000,0],
+        "IRN": [200,2100,3200,0],       "IRQ": [130,880,4400,0],
+        "KWT": [130,470,2700,0],        "CAN": [350,2400,5700,0],
+        "BRA": [150,3300,3700,500],     "GBR": [55,1500,800,900],
+        "ESP": [65,1300,30,1300],       "ITA": [62,1300,80,1250],
+        "NLD": [95,900,40,1600],        "TUR": [42,1000,70,970],
+        "SGP": [80,1600,0,1600],        "AUS": [40,1060,430,700],
+        "PAK": [16,560,80,490],         "BGD": [8,350,10,340],
+        "EGY": [45,840,560,350],        "THA": [45,1400,370,1100],
+        "IDN": [42,1700,600,1200],      "ZAF": [28,620,10,630],
+        "MAR": [9,280,10,280],          "LKA": [3,130,0,130],
+        "LBN": [2,100,0,100],           "YEM": [3,90,30,70],
+        "NGA": [65,530,1500,0],         "QAT": [85,280,1900,0],
+        "OMN": [30,200,1100,0],         "MYS": [42,820,570,350],
+    }
+
+    HORMUZ_EXPOSURE = {
+        "JPN": 3050, "KOR": 2600, "CHN": 3500, "IND": 1800, "SGP": 1400,
+        "THA": 900,  "IDN": 600,  "MYS": 400,  "TUR": 600,  "GBR": 200,
+        "DEU": 250,  "ITA": 300,  "ESP": 220,  "FRA": 180,  "NLD": 350,
+        "USA": 500,  "AUS": 180,  "EGY": 200,  "PAK": 450,  "BGD": 300,
+    }
+    HORMUZ_EXPORTERS = {"SAU": 7000, "ARE": 2500, "KWT": 1800, "IRQ": 3500, "QAT": 1200}
+
+    hf = hormuz_pct / 100.0
+    surge = consumption_surge / 100.0
+
+    country_status = []
+    for iso3, (stocks_mb, cons_kbd, prod_kbd, imp_kbd) in BASELINE.items():
+        adj_stocks = stocks_mb
+        adj_cons   = cons_kbd
+        adj_prod   = prod_kbd
+
+        if iso3 in HORMUZ_EXPOSURE:
+            hormuz_kbd    = HORMUZ_EXPOSURE[iso3]
+            daily_loss    = (hormuz_kbd * hf) / 1000
+            depletion     = daily_loss * days_elapsed
+            surge_draw    = (cons_kbd * surge / 1000) * days_elapsed
+            adj_stocks    = max(0.5, stocks_mb - depletion - surge_draw)
+            adj_cons      = round(cons_kbd * (1 + surge))
+
+        if iso3 in HORMUZ_EXPORTERS:
+            blocked_kbd   = HORMUZ_EXPORTERS[iso3] * hf
+            stock_build   = (blocked_kbd * hf * days_elapsed) / 1000
+            adj_stocks    = min(stocks_mb * 1.4, stocks_mb + stock_build * 0.3)
+            adj_prod      = round(prod_kbd * (1 - hf * 0.15))
+
+        gap  = adj_cons - adj_prod
+        days = 999 if gap <= 0 else min(998, round((adj_stocks * 1000) / gap))
+
+        if days < 90:   # only include countries below 90-day IEA threshold
+            country_status.append({
+                "iso3":       iso3,
+                "stocks_mb":  round(adj_stocks, 1),
+                "cons_kbd":   adj_cons,
+                "prod_kbd":   adj_prod,
+                "days":       days,
+                "severity":   "critical" if days < 14 else "severe" if days < 45 else "moderate",
+            })
+
+    country_status.sort(key=lambda x: x["days"])
+    critical  = [c for c in country_status if c["severity"] == "critical"]
+    severe    = [c for c in country_status if c["severity"] == "severe"]
+    moderate  = [c for c in country_status if c["severity"] == "moderate"]
+
+    summary_lines = "\n".join(
+        f"- {c['iso3']}: {c['days']} days remaining ({c['severity'].upper()}), "
+        f"stocks {c['stocks_mb']}Mb, consumption {c['cons_kbd']}kbd, production {c['prod_kbd']}kbd"
+        for c in country_status[:20]
+    )
+
+    prompt = (
+        f"You are an energy security analyst. It is Week {week_number} of the Iran-US war "
+        f"(started Feb 28 2026, {days_elapsed} days elapsed). "
+        f"The Strait of Hormuz is {hormuz_pct:.0f}% closed to commercial traffic. "
+        f"Consumer fuel demand is running {consumption_surge:.1f}% above pre-war levels due to hoarding.\n\n"
+        f"Based on war-adjusted stockpile modelling, the following countries are below "
+        f"the IEA 90-day emergency threshold:\n{summary_lines}\n\n"
+        f"Search for the latest news (Reuters, Bloomberg, IEA, EIA, S&P Global) from the past 7 days "
+        f"about oil supply shortages, fuel rationing, emergency SPR releases, and country-specific "
+        f"energy crises related to the Iran-US war.\n\n"
+        f"Write a concise Week {week_number} Global Oil Supply Assessment (under 200 words) covering:\n"
+        f"1. Which countries face CRITICAL shortage (under 14 days)\n"
+        f"2. Which countries face SEVERE shortage (14-45 days)\n"
+        f"3. Key supply developments this week (SPR releases, alternative routes, OPEC response)\n"
+        f"4. Overall risk trajectory for next 7 days\n"
+        f"Respond in English only.\n"
+        f"End with: REFS:[{{\"title\":\"...\",\"url\":\"...\"}},...] with up to 5 real URLs."
+    )
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-search-preview",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=700,
+        )
+        raw = response.choices[0].message.content.strip()
+
+        assessment = raw
+        refs = []
+        if "REFS:" in raw:
+            parts = raw.split("REFS:", 1)
+            assessment = parts[0].strip()
+            try:
+                refs = _json.loads(parts[1].strip())
+                if not isinstance(refs, list):
+                    refs = []
+            except Exception:
+                refs = []
+
+        # Clean markdown links from assessment text
+        assessment = _re.sub(r'\[([^\]]+)\]\(https?://[^\)]+\)', r'\1', assessment)
+        assessment = _re.sub(r'https?://\S+', '', assessment)
+        assessment = _re.sub(r'\[\d+\]', '', assessment)
+        assessment = _re.sub(r'  +', ' ', assessment).strip()
+
+        out = {
+            "week_number":    week_number,
+            "days_elapsed":   days_elapsed,
+            "hormuz_pct":     round(hormuz_pct, 1),
+            "assessment":     assessment,
+            "critical_count": len(critical),
+            "severe_count":   len(severe),
+            "moderate_count": len(moderate),
+            "critical":       critical,
+            "severe":         severe,
+            "moderate":       moderate,
+            "refs":           refs,
+            "generated_at":   now.isoformat(),
+            "model":          "gpt-4o-search-preview",
+        }
+        _cache[cache_key] = {"ts": time.time(), "data": out}
+        log.info("Weekly assessment generated — Week %d, %d critical, %d severe",
+                 week_number, len(critical), len(severe))
+        return jsonify(out)
+
+    except Exception as e:
+        log.warning("Weekly assessment failed: %s", e)
+        return jsonify({"assessment": None, "error": str(e)}), 500
+
+
+def generate_weekly_assessment():
+    """Called by scheduler every Monday — pre-generates and caches weekly assessment."""
+    log.info("Generating weekly AI stockpile assessment…")
+    _cache.pop("ai_weekly_assessment", None)   # force fresh generation
+    try:
+        with app.test_request_context():
+            ai_weekly_assessment()
+        log.info("Weekly assessment pre-generated successfully")
+    except Exception as e:
+        log.warning("Weekly assessment pre-generation failed: %s", e)
+
+
 # ── Background scheduler ──────────────────────────────────────────────────────
 def scheduled_refresh():
     log.info("Scheduled daily refresh starting…")
@@ -1538,8 +1731,9 @@ _warmup_thread.start()
 
 _scheduler = BackgroundScheduler()
 _scheduler.add_job(scheduled_refresh, "cron", hour=7, minute=0, timezone="UTC")
+_scheduler.add_job(generate_weekly_assessment, "cron", day_of_week="mon", hour=8, minute=0, timezone="UTC")
 _scheduler.start()
-log.info("Scheduler running — daily refresh at 07:00 UTC")
+log.info("Scheduler running — daily refresh at 07:00 UTC, weekly assessment Mondays 08:00 UTC")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
