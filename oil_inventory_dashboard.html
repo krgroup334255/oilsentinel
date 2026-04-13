@@ -1339,7 +1339,7 @@ function renderSirenMarkers() {
         <div class="pr"><span>Imported Oil</span><span class="pv">${c.imports_kbd > 0 ? (c.imports_kbd/1000).toFixed(2)+' M bbl/day ('+impDep+'% of needs)' : 'Net exporter'}</span></div>
         <div class="pr"><span>Daily Supply Gap</span><span class="pv" style="color:${domGap>0?'#ff8040':'#4ade80'}">${domGap > 0 ? (domGap/1000).toFixed(2)+' M bbl/day shortfall' : 'Self-sufficient / surplus'}</span></div>
         <div class="pr"><span>Strategic Reserve</span><span class="pv" style="font-size:8px;color:#4a7a9a">${c.nearest_spr}</span></div>
-        <div class="pr"><span>Data Source</span><span class="pv" style="color:#334155">${c._eia_live?'EIA (live)':c._jodi_live?'JODI (live)':c._wb_updated?'World Bank':'IEA / BP baseline'}</span></div>
+        <div class="pr"><span>Data Source</span><span class="pv" style="color:#334155">${c._eia_live?'EIA (live)':c._jodi_live?'JODI (live)':c._wb_updated?'World Bank':'IEA / BP baseline'}${c._war_adjusted?' · war-adjusted':''}</span></div>
         <div class="pb"><div class="pbar" style="width:${bar}%;background:${col}"></div></div>
         <div class="pl">Bar = stockpile vs 90-day IEA emergency benchmark · assumes all imports stop</div>
         <div class="ai-section">
@@ -1558,6 +1558,64 @@ async function fetchWorldBank() {
     });
     console.log(`WB updated ${n} countries`);
   } catch(e) { console.warn('WB failed:', e); }
+}
+
+// ─────────────────────────────────────────────
+// WAR-IMPACT — dynamic stock depletion based on
+// days elapsed since war start + Hormuz exposure
+// ─────────────────────────────────────────────
+let _warStatus = null;
+
+async function fetchWarStatus() {
+  if (!USE_BACKEND) return;
+  setStep('War model: applying conflict impact to country stocks…');
+  try {
+    const r = await fetch(`${BACKEND}/api/war-status`, {signal: AbortSignal.timeout(8000)});
+    if (!r.ok) throw new Error(r.status);
+    _warStatus = await r.json();
+
+    const daysElapsed       = _warStatus.days_elapsed        || 0;
+    const hormuzClosurePct  = _warStatus.hormuz_closure_pct  || 0;
+    const consumptionSurge  = _warStatus.consumption_surge_pct || 0;
+    const hormuzFraction    = hormuzClosurePct / 100;
+
+    COUNTRIES.forEach(c => {
+      const exposure = HORMUZ_EXPOSURE[c.iso3];
+
+      // ── Importers: lose Hormuz-routed supply each day ──
+      if (exposure && exposure[1] === 'importer') {
+        const hormuzKbd      = exposure[0];
+        // Daily import shortfall due to Hormuz closure (Mb/day lost)
+        const dailyShortfall = (hormuzKbd * hormuzFraction) / 1000;
+        // Total stock drawn down over elapsed days
+        const depletionMb    = dailyShortfall * daysElapsed;
+        // Consumption surge adds extra daily draw on stocks
+        const surgeDraw      = (c.consumption_kbd * (consumptionSurge / 100) / 1000) * daysElapsed;
+        c.stocks_mb          = Math.max(0.5, c.stocks_mb - depletionMb - surgeDraw);
+        // Effective consumption also rises
+        c.consumption_kbd    = Math.round(c.consumption_kbd * (1 + consumptionSurge / 100));
+        c._war_adjusted      = true;
+      }
+
+      // ── Exporters through Hormuz: production backs up, domestic stocks rise ──
+      // But revenues fall, some production curtailed
+      if (exposure && exposure[1] === 'exporter') {
+        const hormuzExportKbd   = exposure[0];
+        const blockedExportKbd  = hormuzExportKbd * hormuzFraction;
+        // Blocked exports accumulate in domestic storage (capped at +40%)
+        const stockBuildMb      = (blockedExportKbd * hormuzFraction * daysElapsed) / 1000;
+        c.stocks_mb             = Math.min(c.stocks_mb * 1.4, c.stocks_mb + stockBuildMb * 0.3);
+        // Production also drops as storage fills and demand collapses
+        c.production_kbd        = Math.round(c.production_kbd * (1 - hormuzFraction * 0.15));
+        c._war_adjusted         = true;
+      }
+
+      // Recalculate days with updated stocks + consumption
+      c.days = computeDays(c.stocks_mb, c.consumption_kbd, c.production_kbd, c.imports_kbd);
+    });
+
+    console.log(`War impact applied: day ${daysElapsed}, Hormuz ${hormuzClosurePct}% closed, surge +${consumptionSurge}%`);
+  } catch(e) { console.warn('War status fetch failed:', e); }
 }
 
 // ─────────────────────────────────────────────
@@ -2487,6 +2545,9 @@ async function fullRefresh(){
 
   // Parallel: World Bank + EIA + JODI flows (independent)
   await Promise.all([ fetchWorldBank(), fetchEIA(), fetchCountryFlows() ]);
+
+  // War-impact adjustment (runs after JODI flows so it adjusts live values)
+  await fetchWarStatus();
 
   // GeoJSON choropleth (needs updated COUNTRIES data)
   await loadChoropleth();

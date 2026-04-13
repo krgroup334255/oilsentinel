@@ -749,9 +749,52 @@ def fetch_oil_news(query="oil energy sanctions OPEC supply", page_size=20):
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+WAR_START_DATE = datetime(2026, 2, 28, tzinfo=timezone.utc)
+
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.now(timezone.utc).isoformat()})
+
+@app.route("/api/war-status")
+def war_status():
+    """
+    Returns current war context: days elapsed, Hormuz closure % assumption,
+    and per-country stock depletion estimates based on elapsed days.
+    Used by frontend to apply dynamic war-impact adjustments to country stocks.
+    """
+    now = datetime.now(timezone.utc)
+    days_elapsed = max(0, (now - WAR_START_DATE).days)
+
+    # Hormuz throughput reduction over time:
+    # Week 1-2: partial disruption (~30% reduction)
+    # Week 3-4: significant (~55% reduction)
+    # Day 30+:  near-full closure (~75% reduction, some tanker rerouting)
+    # Day 60+:  stabilise at ~70% as rerouting increases
+    if days_elapsed <= 14:
+        hormuz_closure_pct = min(30, days_elapsed * 2.1)
+    elif days_elapsed <= 30:
+        hormuz_closure_pct = 30 + (days_elapsed - 14) * 1.6
+    elif days_elapsed <= 60:
+        hormuz_closure_pct = 55 + (days_elapsed - 30) * 0.67
+    else:
+        hormuz_closure_pct = min(75, 75 - (days_elapsed - 60) * 0.1)  # slight recovery from rerouting
+
+    # Consumption surge factor: panic buying + hoarding + inefficiency
+    # Peaks around day 20-40, eases slightly as rationing kicks in
+    if days_elapsed <= 20:
+        consumption_surge_pct = days_elapsed * 0.15   # up to +3%
+    elif days_elapsed <= 45:
+        consumption_surge_pct = 3 + (days_elapsed - 20) * 0.08  # up to +5%
+    else:
+        consumption_surge_pct = max(3, 5 - (days_elapsed - 45) * 0.04)  # eases back
+
+    return jsonify({
+        "war_start":           WAR_START_DATE.date().isoformat(),
+        "days_elapsed":        days_elapsed,
+        "hormuz_closure_pct":  round(hormuz_closure_pct, 1),
+        "consumption_surge_pct": round(consumption_surge_pct, 2),
+        "as_of":               now.isoformat(),
+    })
 
 @app.route("/api/eia/stocks")
 def eia_stocks():
