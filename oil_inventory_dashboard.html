@@ -2205,13 +2205,20 @@ function selectCountry(iso3) {
 }
 
 // ─────────────────────────────────────────────
-// REFRESH COUNTDOWN
+// REFRESH COUNTDOWN — synced to next midnight UTC
 // ─────────────────────────────────────────────
-let nxtT=Date.now()+86400000;
+function nextMidnightUTC() {
+  const now = new Date();
+  const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+  return midnight.getTime();
+}
+let nxtT = nextMidnightUTC();
 function tickCountdown(){
   const r=Math.max(0,nxtT-Date.now());
   const h=Math.floor(r/3600000), m=Math.floor((r%3600000)/60000);
   document.getElementById('nxt').textContent=`Next refresh in ${h}h ${m}m`;
+  // Auto-refresh when countdown hits zero
+  if (r === 0) { nxtT = nextMidnightUTC(); fullRefresh(); }
 }
 setInterval(tickCountdown,60000);
 
@@ -2874,7 +2881,7 @@ async function fullRefresh(){
   document.getElementById('ts').textContent='Synced: '+nowStr;
   const ft = document.getElementById('footer-ts');
   if (ft) ft.textContent='Last sync: '+nowStr;
-  nxtT=Date.now()+86400000; tickCountdown();
+  nxtT=nextMidnightUTC(); tickCountdown();
 
   // AI analysis (market sentiment)
   typeWrite(document.getElementById('ait'), buildAnalysis(gdelt));
@@ -2894,8 +2901,16 @@ async function fullRefresh(){
 
 // Boot
 fullRefresh();
-// Auto-refresh every 24h
-setInterval(fullRefresh, 86400000);
+
+// Auto-refresh at midnight UTC — schedules next refresh dynamically
+function scheduleMidnightRefresh() {
+  const msToMidnight = nextMidnightUTC() - Date.now();
+  setTimeout(() => {
+    fullRefresh();
+    scheduleMidnightRefresh(); // reschedule for next midnight
+  }, msToMidnight);
+}
+scheduleMidnightRefresh();
 </script>
 </body>
 </html>

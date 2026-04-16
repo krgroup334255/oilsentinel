@@ -1827,7 +1827,7 @@ def generate_weekly_assessment():
 
 # ── Background scheduler ──────────────────────────────────────────────────────
 def scheduled_refresh():
-    log.info("Scheduled daily refresh starting…")
+    log.info("Scheduled midnight refresh starting…")
     fetch_eia_us_stocks()
     fetch_eia_us_consumption()
     fetch_eia_imports()
@@ -1839,7 +1839,39 @@ def scheduled_refresh():
         query="oil Iran Russia Saudi OPEC sanctions war conflict pipeline supply",
         page_size=25
     )
-    log.info("Scheduled daily refresh complete")
+    log.info("Scheduled midnight refresh complete")
+
+
+def midnight_ai_refresh():
+    """
+    Runs at midnight UTC — busts all AI caches so fresh GPT-4o searches
+    are triggered on the next request (fuel crisis scan, country discovery,
+    price prediction, scenario predictions).
+    """
+    log.info("Midnight AI cache bust starting…")
+    ai_keys = [
+        "ai_fuel_crisis_scan",
+        "ai_country_discovery",
+        "ai_price_prediction",
+        "ai_scenario_1", "ai_scenario_2", "ai_scenario_3", "ai_scenario_4",
+    ]
+    for k in ai_keys:
+        _cache.pop(k, None)
+    log.info("Midnight AI cache bust complete — %d keys cleared", len(ai_keys))
+
+    # Pre-generate fuel crisis scan and country discovery in background
+    try:
+        with app.test_request_context():
+            ai_fuel_crisis_scan()
+            log.info("Midnight: fuel crisis scan pre-generated")
+    except Exception as e:
+        log.warning("Midnight fuel crisis scan failed: %s", e)
+    try:
+        with app.test_request_context():
+            ai_country_discovery()
+            log.info("Midnight: country discovery pre-generated")
+    except Exception as e:
+        log.warning("Midnight country discovery failed: %s", e)
 
 
 # ── Startup: cache warm-up + scheduler (runs under both __main__ and gunicorn) ─
@@ -1848,10 +1880,13 @@ _warmup_thread = threading.Thread(target=scheduled_refresh, daemon=True)
 _warmup_thread.start()
 
 _scheduler = BackgroundScheduler()
-_scheduler.add_job(scheduled_refresh, "cron", hour=7, minute=0, timezone="UTC")
-_scheduler.add_job(generate_weekly_assessment, "cron", day_of_week="mon", hour=8, minute=0, timezone="UTC")
+# Midnight UTC — data refresh + AI cache bust
+_scheduler.add_job(scheduled_refresh,     "cron", hour=0, minute=0,  timezone="UTC")
+_scheduler.add_job(midnight_ai_refresh,   "cron", hour=0, minute=5,  timezone="UTC")
+# Monday 00:10 UTC — weekly assessment (after midnight data refresh)
+_scheduler.add_job(generate_weekly_assessment, "cron", day_of_week="mon", hour=0, minute=10, timezone="UTC")
 _scheduler.start()
-log.info("Scheduler running — daily refresh at 07:00 UTC, weekly assessment Mondays 08:00 UTC")
+log.info("Scheduler running — midnight UTC data refresh, 00:05 AI bust, Monday 00:10 weekly assessment")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
