@@ -751,6 +751,14 @@ def fetch_oil_news(query="oil energy sanctions OPEC supply", page_size=20):
 # ── Routes ────────────────────────────────────────────────────────────────────
 WAR_START_DATE = datetime(2026, 2, 28, tzinfo=timezone.utc)
 
+@app.route("/")
+def index():
+    """Serve the dashboard HTML directly from Railway — no Hostinger needed."""
+    import pathlib
+    html_path = pathlib.Path(__file__).parent / "oil_inventory_dashboard.html"
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read(), 200, {"Content-Type": "text/html; charset=utf-8"}
+
 @app.route("/api/health")
 def health():
     return jsonify({"status": "ok", "time": datetime.now(timezone.utc).isoformat()})
