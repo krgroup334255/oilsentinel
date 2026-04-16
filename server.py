@@ -1514,6 +1514,102 @@ def ai_fuel_crisis_scan():
         return jsonify({"crisis_count": 0, "countries": [], "error": str(e)}), 500
 
 
+@app.route("/api/ai/country-discovery")
+def ai_country_discovery():
+    """
+    AI news scraper: discovers countries NOT already in the dashboard that are
+    experiencing significant oil supply disruption, import disruption, fuel rationing,
+    or energy crisis due to the Iran-US war. Returns new countries to add to the model.
+    Cached 6 hours.
+    """
+    import json as _json, re as _re
+    cache_key = "ai_country_discovery"
+    entry = _cache.get(cache_key)
+    if entry and (time.time() - entry["ts"]) < 21600:   # 6h TTL
+        log.info("Country discovery served from cache")
+        return jsonify(entry["data"])
+
+    now = datetime.now(timezone.utc)
+    days_elapsed = max(0, (now - WAR_START_DATE).days)
+
+    # Countries already tracked (so we only return NEW ones)
+    tracked = [
+        "USA","CHN","IND","JPN","KOR","DEU","FRA","SAU","RUS","ARE","IRN","IRQ",
+        "KWT","CAN","BRA","GBR","ESP","ITA","NLD","TUR","SGP","AUS","POL","UKR",
+        "NGA","LBY","DZA","VEN","KAZ","NOR","QAT","OMN","AZE","ECU","COL","MYS",
+        "PAK","BGD","EGY","THA","IDN","ZAF","ARG","MAR","LKA","LBN","YEM","MMR",
+        "CUB","PER","GHA","SDN","BHR","TKM","GTM","BOL","MEX","JOR","TWN","PHL",
+        "ISR","ETH","KEN","NZL","GRC",
+    ]
+    tracked_str = ", ".join(tracked)
+
+    prompt = (
+        f"It is {now.strftime('%B %d, %Y')}, Day {days_elapsed} of the Iran-US war (started Feb 28 2026). "
+        f"The Strait of Hormuz is approximately 67% disrupted. "
+        f"Search for recent news about countries that are experiencing significant oil supply problems, "
+        f"fuel shortages, import disruptions, or energy crises caused by the Iran-US war and Hormuz disruption "
+        f"that are NOT in this already-tracked list: {tracked_str}. "
+        f"For each new country you find that has credible supply disruption news, provide: "
+        f"country name, ISO-3 code, estimated oil stocks in million barrels (stocks_mb), "
+        f"consumption in kbd, domestic production in kbd, imports in kbd, "
+        f"Hormuz-routed imports in kbd (how much of their oil transits Hormuz), "
+        f"and a one-line summary of the crisis. "
+        f"Only include countries with REAL confirmed disruptions from news sources. "
+        f"Respond in English only. "
+        f"Format: COUNTRIES:[{{\"iso3\":\"...\",\"name\":\"...\",\"stocks_mb\":N,\"cons_kbd\":N,"
+        f"\"prod_kbd\":N,\"imp_kbd\":N,\"hormuz_kbd\":N,\"flag\":\"emoji\","
+        f"\"lat\":N,\"lng\":N,\"summary\":\"...\"}},...] "
+        f"Then REFS:[{{\"title\":\"...\",\"url\":\"...\"}},...] with up to 5 real URLs. "
+        f"If no new countries are found, return COUNTRIES:[]."
+    )
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-search-preview",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=900,
+        )
+        raw = response.choices[0].message.content.strip()
+
+        new_countries = []
+        refs = []
+
+        if "COUNTRIES:" in raw:
+            remainder = raw.split("COUNTRIES:", 1)[1].strip()
+            if "REFS:" in remainder:
+                countries_part, refs_part = remainder.split("REFS:", 1)
+            else:
+                countries_part, refs_part = remainder, "[]"
+            try:
+                new_countries = _json.loads(countries_part.strip())
+                if not isinstance(new_countries, list):
+                    new_countries = []
+            except Exception:
+                new_countries = []
+            try:
+                refs = _json.loads(refs_part.strip())
+                if not isinstance(refs, list):
+                    refs = []
+            except Exception:
+                refs = []
+
+        out = {
+            "days_elapsed":    days_elapsed,
+            "new_count":       len(new_countries),
+            "new_countries":   new_countries,
+            "refs":            refs,
+            "generated_at":    now.isoformat(),
+            "model":           "gpt-4o-search-preview",
+        }
+        _cache[cache_key] = {"ts": time.time(), "data": out}
+        log.info("Country discovery: found %d new affected countries", len(new_countries))
+        return jsonify(out)
+
+    except Exception as e:
+        log.warning("Country discovery failed: %s", e)
+        return jsonify({"new_count": 0, "new_countries": [], "error": str(e)}), 500
+
+
 @app.route("/api/ai/weekly-assessment")
 def ai_weekly_assessment():
     """
@@ -1568,6 +1664,11 @@ def ai_weekly_assessment():
         "LBN": [2,100,0,100],           "YEM": [3,90,30,70],
         "NGA": [65,530,1500,0],         "QAT": [85,280,1900,0],
         "OMN": [30,200,1100,0],         "MYS": [42,820,570,350],
+        "JOR": [15,200,5,200],          "TWN": [90,1100,5,1100],
+        "PHL": [25,450,10,430],         "ISR": [60,280,20,250],
+        "ETH": [5,70,0,70],             "ZAF": [28,620,10,630],
+        "KEN": [15,110,0,100],          "NZL": [15,160,20,140],
+        "GRC": [30,300,10,280],         "CUB": [5,130,50,90],
     }
 
     HORMUZ_EXPOSURE = {
@@ -1575,6 +1676,9 @@ def ai_weekly_assessment():
         "THA": 900,  "IDN": 600,  "MYS": 400,  "TUR": 600,  "GBR": 200,
         "DEU": 250,  "ITA": 300,  "ESP": 220,  "FRA": 180,  "NLD": 350,
         "USA": 500,  "AUS": 180,  "EGY": 200,  "PAK": 450,  "BGD": 300,
+        "LKA": 120,  "LBN": 80,   "JOR": 180,  "TWN": 900,  "PHL": 350,
+        "ISR": 150,  "ETH": 50,   "ZAF": 300,  "KEN": 80,   "NZL": 100,
+        "GRC": 100,
     }
     HORMUZ_EXPORTERS = {"SAU": 7000, "ARE": 2500, "KWT": 1800, "IRQ": 3500, "QAT": 1200}
 
@@ -1611,20 +1715,22 @@ def ai_weekly_assessment():
                 "cons_kbd":   adj_cons,
                 "prod_kbd":   adj_prod,
                 "days":       days,
-                "severity":   "critical" if days < 14 else "severe" if days < 45 else "moderate",
+                "severity":   "depleted" if days <= 0 else "critical" if days < 14 else "severe" if days < 45 else "moderate",
             })
 
     country_status.sort(key=lambda x: x["days"])
+    depleted  = [c for c in country_status if c["severity"] == "depleted"]
     critical  = [c for c in country_status if c["severity"] == "critical"]
     severe    = [c for c in country_status if c["severity"] == "severe"]
     moderate  = [c for c in country_status if c["severity"] == "moderate"]
 
     summary_lines = "\n".join(
-        f"- {c['iso3']}: {c['days']} days remaining ({c['severity'].upper()}), "
+        f"- {c['iso3']}: {'DEPLETED (fuel rationing / emergency imports only)' if c['days'] <= 0 else str(c['days']) + ' days remaining'} ({c['severity'].upper()}), "
         f"stocks {c['stocks_mb']}Mb, consumption {c['cons_kbd']}kbd, production {c['prod_kbd']}kbd"
-        for c in country_status[:20]
+        for c in country_status[:25]
     )
 
+    depleted_str = ", ".join(c["iso3"] for c in depleted) if depleted else "none"
     prompt = (
         f"You are an energy security analyst. It is Week {week_number} of the Iran-US war "
         f"(started Feb 28 2026, {days_elapsed} days elapsed). "
@@ -1632,14 +1738,16 @@ def ai_weekly_assessment():
         f"Consumer fuel demand is running {consumption_surge:.1f}% above pre-war levels due to hoarding.\n\n"
         f"Based on war-adjusted stockpile modelling, the following countries are below "
         f"the IEA 90-day emergency threshold:\n{summary_lines}\n\n"
+        f"DEPLETED (stocks exhausted, surviving on emergency imports / rationing): {depleted_str}\n\n"
         f"Search for the latest news (Reuters, Bloomberg, IEA, EIA, S&P Global) from the past 7 days "
         f"about oil supply shortages, fuel rationing, emergency SPR releases, and country-specific "
         f"energy crises related to the Iran-US war.\n\n"
-        f"Write a concise Week {week_number} Global Oil Supply Assessment (under 200 words) covering:\n"
-        f"1. Which countries face CRITICAL shortage (under 14 days)\n"
-        f"2. Which countries face SEVERE shortage (14-45 days)\n"
-        f"3. Key supply developments this week (SPR releases, alternative routes, OPEC response)\n"
-        f"4. Overall risk trajectory for next 7 days\n"
+        f"Write a concise Week {week_number} Global Oil Supply Assessment (under 250 words) covering:\n"
+        f"1. Which countries are DEPLETED (stocks exhausted, now on emergency imports or rationing)\n"
+        f"2. Which countries face CRITICAL shortage (under 14 days)\n"
+        f"3. Which countries face SEVERE shortage (14-45 days)\n"
+        f"4. Key supply developments this week (SPR releases, alternative routes, OPEC response)\n"
+        f"5. Overall risk trajectory for next 7 days\n"
         f"Respond in English only.\n"
         f"End with: REFS:[{{\"title\":\"...\",\"url\":\"...\"}},...] with up to 5 real URLs."
     )
@@ -1671,19 +1779,21 @@ def ai_weekly_assessment():
         assessment = _re.sub(r'  +', ' ', assessment).strip()
 
         out = {
-            "week_number":    week_number,
-            "days_elapsed":   days_elapsed,
-            "hormuz_pct":     round(hormuz_pct, 1),
-            "assessment":     assessment,
-            "critical_count": len(critical),
-            "severe_count":   len(severe),
-            "moderate_count": len(moderate),
-            "critical":       critical,
-            "severe":         severe,
-            "moderate":       moderate,
-            "refs":           refs,
-            "generated_at":   now.isoformat(),
-            "model":          "gpt-4o-search-preview",
+            "week_number":     week_number,
+            "days_elapsed":    days_elapsed,
+            "hormuz_pct":      round(hormuz_pct, 1),
+            "assessment":      assessment,
+            "depleted_count":  len(depleted),
+            "critical_count":  len(critical),
+            "severe_count":    len(severe),
+            "moderate_count":  len(moderate),
+            "depleted":        depleted,
+            "critical":        critical,
+            "severe":          severe,
+            "moderate":        moderate,
+            "refs":            refs,
+            "generated_at":    now.isoformat(),
+            "model":           "gpt-4o-search-preview",
         }
         _cache[cache_key] = {"ts": time.time(), "data": out}
         log.info("Weekly assessment generated — Week %d, %d critical, %d severe",

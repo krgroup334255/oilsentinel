@@ -224,6 +224,7 @@ body {
 .cn2 { font-size:11px; font-weight:700; color:#e2e8f0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cd  { font-size:9px; color:#475569; margin-top:2px; }
 .db  { font-size:9px; font-weight:800; border-radius:6px; padding:3px 8px; white-space:nowrap; margin-left:6px; }
+.dd-badge { background:rgba(24,24,27,.7);  color:#a1a1aa; border:1px solid rgba(100,100,120,.4); }
 .dc  { background:rgba(239,68,68,.15);  color:#f87171; border:1px solid rgba(239,68,68,.25); }
 .dw  { background:rgba(245,158,11,.1);  color:#fbbf24; border:1px solid rgba(245,158,11,.2); }
 .do  { background:rgba(34,197,94,.1);   color:#4ade80; border:1px solid rgba(34,197,94,.2); }
@@ -360,6 +361,26 @@ body {
 .mk-ring {
   position:absolute; border-radius:50%;
   animation:ripple 1.6s ease-out infinite;
+  pointer-events:none;
+}
+
+/* DEPLETED — black with skull, slow pulse */
+@keyframes depletedPulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.5; transform:scale(.85); }
+}
+.mk-d { width:22px; height:22px; }
+.mk-d .mk-core {
+  width:14px; height:14px; border-radius:50%;
+  background:#18181b;
+  box-shadow:0 0 8px rgba(0,0,0,.9), 0 0 18px rgba(80,80,80,.4);
+  position:relative; z-index:1;
+  animation:depletedPulse 2.5s ease-in-out infinite;
+}
+.mk-d .mk-ring { width:14px; height:14px; border:2px solid #52525b; animation-duration:3s; }
+.mk-d .mk-skull {
+  position:absolute; font-size:9px; z-index:2; top:50%; left:50%;
+  transform:translate(-50%,-50%);
   pointer-events:none;
 }
 
@@ -847,6 +868,7 @@ body {
         <!-- Severity summary chips -->
         <div id="weekly-chips" style="display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap;"></div>
         <!-- Country lists -->
+        <div id="weekly-depleted" style="margin-bottom:6px;"></div>
         <div id="weekly-critical" style="margin-bottom:6px;"></div>
         <div id="weekly-severe"   style="margin-bottom:6px;"></div>
         <!-- AI narrative -->
@@ -1088,6 +1110,15 @@ const CTABLE = {
   TKM:  [   18,    100,    600,      0, "🇹🇲", true,  40.0,   60.0, "Turkmenistan",      "Turkmenneft: Turkmenbashi + ~4Mb refined stocks (total ~18Mb)"],
   GTM:  [    3,     90,     10,     85, "🇬🇹", false, 15.8,  -90.2, "Guatemala",         "Texaco: Puerto Quetzal + ~1Mb refined stocks (total ~3Mb)"],
   BOL:  [    5,     90,     70,     30, "🇧🇴", false,-16.3,  -63.6, "Bolivia",           "YPFB: Cochabamba + ~2Mb refined stocks (total ~5Mb, landlocked)"],
+  // ── Additional Hormuz-exposed importers identified by news/model ──
+  JOR:  [   15,    200,      5,    200, "🇯🇴", false, 31.2,   36.5, "Jordan",            "JPRC: Zarqa refinery + ~5Mb refined stocks (total ~15Mb, 90% Hormuz-routed)"],
+  TWN:  [   90,   1100,      5,   1100, "🇹🇼", false, 23.7,  121.0, "Taiwan",            "CPC Corp: Taoyuan, Talin + ~35Mb refined product stocks (total ~90Mb)"],
+  PHL:  [   25,    450,     10,    430, "🇵🇭", false, 13.0,  122.0, "Philippines",       "Petron: Limay + ~10Mb refined product stocks (total ~25Mb)"],
+  ISR:  [   60,    280,     20,    250, "🇮🇱", false, 31.5,   34.8, "Israel",            "Bazan: Haifa refinery + ~15Mb strategic stocks (total ~60Mb)"],
+  ETH:  [    5,     70,      0,     70, "🇪🇹", false,  9.1,   40.5, "Ethiopia",          "NOC: Addis Ababa + ~1Mb refined stocks (total ~5Mb, via Djibouti port)"],
+  KEN:  [   15,    110,      0,    100, "🇰🇪", false, -1.3,   36.8, "Kenya",             "KPC: Nairobi pipeline + ~4Mb refined stocks (total ~15Mb, Mombasa port)"],
+  NZL:  [   15,    160,     20,    140, "🇳🇿", false,-40.9,  174.9, "New Zealand",       "Refining NZ: Marsden Point + ~7Mb refined stocks (total ~15Mb)"],
+  GRC:  [   30,    300,     10,    280, "🇬🇷", false, 39.1,   22.0, "Greece",            "Hellenic Petroleum: Aspropyrgos + ~12Mb refined stocks (total ~30Mb)"],
 };
 
 // ─────────────────────────────────────────────
@@ -1120,6 +1151,17 @@ const HORMUZ_EXPOSURE = {
   EGY:  [200,  'importer'],
   PAK:  [450,  'importer'],
   BGD:  [300,  'importer'],
+  LKA:  [120,  'importer'],   // ~90% of Sri Lanka crude via Hormuz
+  LBN:  [80,   'importer'],   // Lebanon small but almost fully Hormuz-routed
+  JOR:  [180,  'importer'],   // Jordan ~90% via Hormuz/Gulf pipelines
+  TWN:  [900,  'importer'],   // Taiwan ~80% of crude via Hormuz
+  PHL:  [350,  'importer'],   // Philippines ~80% via Hormuz
+  ISR:  [150,  'importer'],   // Israel via Eilat/Red Sea route
+  ETH:  [50,   'importer'],   // Ethiopia via Djibouti, Gulf-sourced
+  ZAF:  [300,  'importer'],   // South Africa sources ~50% from Gulf
+  KEN:  [80,   'importer'],   // Kenya via Mombasa, Gulf crude
+  NZL:  [100,  'importer'],   // New Zealand Gulf crude fraction
+  GRC:  [100,  'importer'],   // Greece ~35% from Gulf/Iraq via Hormuz
   // Exporters through Hormuz
   SAU:  [7000, 'exporter'],   // largest single flow
   ARE:  [2500, 'exporter'],
@@ -1216,13 +1258,15 @@ function daysToColor(days) {
   return { fill:'#1a2e42', opacity:0.18 };
 }
 function daysClass(days) {
-  if (days >= 999) return 'do';   // net exporter — always green
+  if (days <= 0)   return 'dd-badge';  // depleted — dark/black
+  if (days >= 999) return 'do';        // net exporter — always green
   if (days < 14)   return 'dc';
   if (days < 45)   return 'dw';
   if (days < 90)   return 'dy';
   return 'do';
 }
 function daysCol(days) {
+  if (days <= 0)   return '#18181b';  // depleted — near black
   if (days >= 999) return '#4ade80';
   if (days < 14)   return '#f87171';
   if (days < 45)   return '#fbbf24';
@@ -1326,7 +1370,10 @@ function renderSirenMarkers() {
     const domGap = c.consumption_kbd - c.production_kbd;
     const impDep = c.consumption_kbd > 0 ? Math.round((c.imports_kbd / c.consumption_kbd) * 100) : 0;
 
-    if (c.days < 14) {
+    if (c.days <= 0) {
+      cls = 'mk-d'; sz = [22,22];
+      html = `<div class="mk ${cls}"><div class="mk-ring"></div><div class="mk-core"></div><div class="mk-skull">☠</div></div>`;
+    } else if (c.days < 14) {
       cls = 'mk-c'; sz = [20,20];
       html = `<div class="mk ${cls}"><div class="mk-ring"></div><div class="mk-core"></div></div>`;
     } else if (c.days < 45) {
@@ -1346,7 +1393,7 @@ function renderSirenMarkers() {
     const icon = L.divIcon({ html, className:'', iconSize:sz, iconAnchor:[sz[0]/2, sz[1]/2] });
     const m = L.marker([c.lat, c.lng], {
       icon,
-      zIndexOffset: c.days < 14 ? 1000 : c.days < 45 ? 500 : 0
+      zIndexOffset: c.days <= 0 ? 2000 : c.days < 14 ? 1000 : c.days < 45 ? 500 : 0
     }).addTo(map);
 
     // Show tooltip on marker hover (not polygon)
@@ -1466,8 +1513,8 @@ function renderCountryList() {
     const isHormuzHit = _hormuzDays > 0 && HORMUZ_EXPOSURE[c.iso3]?.[1] !== 'exporter' && HORMUZ_EXPOSURE[c.iso3];
     const row = document.createElement('div');
     row.className = 'cr' + (isHormuzHit ? ' hormuz-hit' : '');
-    const dLabel = c.days >= 999 ? 'EXP' : c.days + 'd';
-    const dot = c.days < 14 ? '🔴' : c.days < 45 ? '🟠' : c.days < 90 ? '🟡' : '🟢';
+    const dLabel = c.days <= 0 ? 'OUT' : c.days >= 999 ? 'EXP' : c.days + 'd';
+    const dot = c.days <= 0 ? '⚫' : c.days < 14 ? '🔴' : c.days < 45 ? '🟠' : c.days < 90 ? '🟡' : '🟢';
     const detail = isHormuzHit
       ? `Uses ${(c.consumption_kbd/1000).toFixed(1)} M bbl/day · Hormuz: ${(HORMUZ_EXPOSURE[c.iso3][0]/1000).toFixed(1)} M bbl/day`
       : `Uses ${(c.consumption_kbd/1000).toFixed(1)} million barrels/day`;
@@ -1623,10 +1670,11 @@ async function fetchWarStatus() {
         const depletionMb    = dailyShortfall * daysElapsed;
         // Consumption surge adds extra daily draw on stocks
         const surgeDraw      = (c.consumption_kbd * (consumptionSurge / 100) / 1000) * daysElapsed;
-        c.stocks_mb          = Math.max(0.5, c.stocks_mb - depletionMb - surgeDraw);
+        c.stocks_mb          = Math.max(0, c.stocks_mb - depletionMb - surgeDraw);
         // Effective consumption also rises
         c.consumption_kbd    = Math.round(c.consumption_kbd * (1 + consumptionSurge / 100));
         c._war_adjusted      = true;
+        if (c.stocks_mb === 0) c._depleted = true;
       }
 
       // ── Exporters through Hormuz: production backs up, domestic stocks rise ──
@@ -1643,7 +1691,11 @@ async function fetchWarStatus() {
       }
 
       // Recalculate days with updated stocks + consumption
-      c.days = computeDays(c.stocks_mb, c.consumption_kbd, c.production_kbd, c.imports_kbd);
+      if (c._depleted || c.stocks_mb === 0) {
+        c.days = 0;
+      } else {
+        c.days = computeDays(c.stocks_mb, c.consumption_kbd, c.production_kbd, c.imports_kbd);
+      }
     });
 
     console.log(`War impact applied: day ${daysElapsed}, Hormuz ${hormuzClosurePct}% closed, surge +${consumptionSurge}%`);
@@ -2582,20 +2634,30 @@ async function fetchWeeklyAssessment() {
     // Severity chips
     if (chipsEl) {
       chipsEl.innerHTML = [
+        d.depleted_count ? `<span style="background:rgba(24,24,27,.6);border:1px solid rgba(82,82,91,.5);color:#a1a1aa;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">⚫ ${d.depleted_count} Depleted</span>` : '',
         d.critical_count ? `<span style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">🔴 ${d.critical_count} Critical</span>` : '',
         d.severe_count   ? `<span style="background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.3);color:#fb923c;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">🟠 ${d.severe_count} Severe</span>` : '',
         d.moderate_count ? `<span style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.25);color:#fbbf24;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:10px;">🟡 ${d.moderate_count} Moderate</span>` : '',
       ].join('');
     }
 
-    // Critical country list
+    // Country lists per tier
     const renderCountries = (list, color) => list.map(c =>
       `<span style="display:inline-flex;align-items:center;gap:3px;font-size:7.5px;
         color:${color};background:rgba(0,0,0,.2);border:1px solid ${color}33;
         border-radius:4px;padding:1px 5px;margin:1px;">
-        ${c.iso3} <span style="color:#64748b">${c.days}d</span>
+        ${c.iso3} <span style="color:#64748b">${c.days <= 0 ? 'OUT' : c.days + 'd'}</span>
       </span>`
     ).join('');
+
+    // Depleted countries — show before critical
+    const depletedEl = document.getElementById('weekly-depleted');
+    if (depletedEl) {
+      if (d.depleted && d.depleted.length) {
+        depletedEl.innerHTML = `<div style="font-size:7.5px;color:#a1a1aa;font-weight:700;margin-bottom:3px;">⚫ DEPLETED — stocks exhausted (emergency rationing):</div>`
+          + renderCountries(d.depleted, '#71717a');
+      } else depletedEl.innerHTML = '';
+    }
 
     if (critEl && d.critical && d.critical.length) {
       critEl.innerHTML = `<div style="font-size:7.5px;color:#f87171;font-weight:700;margin-bottom:3px;">CRITICAL — under 14 days:</div>`
@@ -2693,6 +2755,85 @@ async function fetchFuelCrisisScan() {
 }
 
 // ─────────────────────────────────────────────
+// AI COUNTRY DISCOVERY — finds new Hormuz-hit countries via news scraping
+// ─────────────────────────────────────────────
+async function fetchCountryDiscovery() {
+  if (!USE_BACKEND) return;
+  try {
+    const r = await fetch(`${BACKEND}/api/ai/country-discovery`, {signal: AbortSignal.timeout(60000)});
+    if (!r.ok) throw new Error(r.status);
+    const data = await r.json();
+    if (!data.new_countries || data.new_countries.length === 0) return;
+
+    let added = 0;
+    data.new_countries.forEach(nc => {
+      if (!nc.iso3 || !nc.name) return;
+      // Skip if already in COUNTRIES
+      if (COUNTRIES.find(c => c.iso3 === nc.iso3)) return;
+      // Add to COUNTRIES dynamically
+      const stocks = nc.stocks_mb || 10;
+      const cons   = nc.cons_kbd  || 100;
+      const prod   = nc.prod_kbd  || 0;
+      const imp    = nc.imp_kbd   || cons;
+      const hkbd   = nc.hormuz_kbd || 0;
+      const country = {
+        iso3:           nc.iso3,
+        name:           nc.name,
+        flag:           nc.flag || '🏳',
+        stocks_mb:      stocks,
+        consumption_kbd: cons,
+        production_kbd: prod,
+        imports_kbd:    imp,
+        producer:       prod > cons,
+        lat:            nc.lat || 0,
+        lng:            nc.lng || 0,
+        nearest_spr:    `AI-discovered: ${nc.summary || ''}`,
+        days:           computeDays(stocks, cons, prod, imp),
+        _war_adjusted:  false,
+        _eia_live:      false,
+        _jodi_live:     false,
+        _ai_discovered: true,
+        _discovery_summary: nc.summary || '',
+      };
+      COUNTRIES.push(country);
+      // Register Hormuz exposure if provided
+      if (hkbd > 0 && !HORMUZ_EXPOSURE[nc.iso3]) {
+        HORMUZ_EXPOSURE[nc.iso3] = [hkbd, 'importer'];
+      }
+      added++;
+    });
+
+    if (added > 0) {
+      console.log(`Country discovery: added ${added} new countries`);
+      // Re-apply war status to newly added countries
+      if (_warStatus) {
+        const daysElapsed      = _warStatus.days_elapsed || 0;
+        const hormuzClosurePct = _warStatus.hormuz_closure_pct || 0;
+        const consumptionSurge = _warStatus.consumption_surge_pct || 0;
+        const hormuzFraction   = hormuzClosurePct / 100;
+        COUNTRIES.filter(c => c._ai_discovered).forEach(c => {
+          const exposure = HORMUZ_EXPOSURE[c.iso3];
+          if (exposure && exposure[1] === 'importer') {
+            const hormuzKbd    = exposure[0];
+            const depletionMb  = (hormuzKbd * hormuzFraction / 1000) * daysElapsed;
+            const surgeDraw    = (c.consumption_kbd * (consumptionSurge / 100) / 1000) * daysElapsed;
+            c.stocks_mb        = Math.max(0, c.stocks_mb - depletionMb - surgeDraw);
+            c.consumption_kbd  = Math.round(c.consumption_kbd * (1 + consumptionSurge / 100));
+            c._war_adjusted    = true;
+            if (c.stocks_mb === 0) c._depleted = true;
+            c.days             = c._depleted ? 0 : computeDays(c.stocks_mb, c.consumption_kbd, c.production_kbd, c.imports_kbd);
+          }
+        });
+      }
+      renderCountryList();
+      renderSirenMarkers();
+    }
+  } catch(e) {
+    console.warn('Country discovery failed:', e);
+  }
+}
+
+// ─────────────────────────────────────────────
 // MAIN REFRESH
 // ─────────────────────────────────────────────
 async function fullRefresh(){
@@ -2741,8 +2882,9 @@ async function fullRefresh(){
   // Crude price ticker + AI panels (non-blocking)
   fetchCrudePrice();
   fetchAIPricePrediction();
-  fetchWeeklyAssessment(); // weekly stockpile assessment — non-blocking, cached 7 days
-  fetchFuelCrisisScan();   // AI news scan — non-blocking, updates crisis panel async
+  fetchWeeklyAssessment();     // weekly stockpile assessment — non-blocking, cached 7 days
+  fetchFuelCrisisScan();       // AI news scan — non-blocking, updates crisis panel async
+  fetchCountryDiscovery();     // AI discovers new war-affected countries — non-blocking, cached 6h
   // Auto-run scenario 2 (status quo) on first load; user can switch tabs
   if (_activeScenario === null) selectScenario(2);
 
