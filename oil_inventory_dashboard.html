@@ -1119,6 +1119,9 @@ const CTABLE = {
   KEN:  [   15,    110,      0,    100, "🇰🇪", false, -1.3,   36.8, "Kenya",             "KPC: Nairobi pipeline + ~4Mb refined stocks (total ~15Mb, Mombasa port)"],
   NZL:  [   15,    160,     20,    140, "🇳🇿", false,-40.9,  174.9, "New Zealand",       "Refining NZ: Marsden Point + ~7Mb refined stocks (total ~15Mb)"],
   GRC:  [   30,    300,     10,    280, "🇬🇷", false, 39.1,   22.0, "Greece",            "Hellenic Petroleum: Aspropyrgos + ~12Mb refined stocks (total ~30Mb)"],
+  GEO:  [    4,     60,      0,     60, "🇬🇪", false, 42.3,   43.4, "Georgia",           "Batumi Oil Terminal + ~1.5Mb refined stocks (total ~4Mb, BTC pipeline transit)"],
+  MNG:  [    3,     30,      0,     30, "🇲🇳", false, 46.9,  103.8, "Mongolia",          "MARPETCO: Ulaanbaatar + ~1Mb refined stocks (total ~3Mb, landlocked via China)"],
+  NPL:  [    3,     40,      0,     40, "🇳🇵", false, 28.4,   84.1, "Nepal",             "NOC: Thankot depot + ~1Mb refined stocks (total ~3Mb, landlocked via India)"],
 };
 
 // ─────────────────────────────────────────────
@@ -1162,6 +1165,9 @@ const HORMUZ_EXPOSURE = {
   KEN:  [80,   'importer'],   // Kenya via Mombasa, Gulf crude
   NZL:  [100,  'importer'],   // New Zealand Gulf crude fraction
   GRC:  [100,  'importer'],   // Greece ~35% from Gulf/Iraq via Hormuz
+  GEO:  [15,   'importer'],   // Georgia ~25% via Gulf (rest is Russian/Azerbaijani via BTC)
+  MNG:  [20,   'importer'],   // Mongolia via China re-export — indirect Hormuz exposure
+  NPL:  [25,   'importer'],   // Nepal via India — indirect Hormuz exposure (~60% of India's crude)
   // Exporters through Hormuz
   SAU:  [7000, 'exporter'],   // largest single flow
   ARE:  [2500, 'exporter'],
@@ -1223,7 +1229,8 @@ const ISO3_TO_ISO2 = {
   YEM:"YE",MMR:"MM",CUB:"CU",ARG:"AR",IDN:"ID",MYS:"MY",KAZ:"KZ",NOR:"NO",
   POL:"PL",UKR:"UA",AUS:"AU",ZAF:"ZA",MAR:"MA",COL:"CO",PER:"PE",GTM:"GT",
   GHA:"GH",SDN:"SD",QAT:"QA",OMN:"OM",BHR:"BH",TKM:"TM",AZE:"AZ",ECU:"EC",
-  BOL:"BO"
+  BOL:"BO",JOR:"JO",TWN:"TW",PHL:"PH",ISR:"IL",ETH:"ET",KEN:"KE",NZL:"NZ",
+  GRC:"GR",GEO:"GE",MNG:"MN",NPL:"NP",
 };
 const ISO2_TO_ISO3 = Object.fromEntries(Object.entries(ISO3_TO_ISO2).map(([a,b])=>[b,a]));
 

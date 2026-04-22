@@ -1547,7 +1547,7 @@ def ai_country_discovery():
         "NGA","LBY","DZA","VEN","KAZ","NOR","QAT","OMN","AZE","ECU","COL","MYS",
         "PAK","BGD","EGY","THA","IDN","ZAF","ARG","MAR","LKA","LBN","YEM","MMR",
         "CUB","PER","GHA","SDN","BHR","TKM","GTM","BOL","MEX","JOR","TWN","PHL",
-        "ISR","ETH","KEN","NZL","GRC",
+        "ISR","ETH","KEN","NZL","GRC","GEO","MNG","NPL",
     ]
     tracked_str = ", ".join(tracked)
 
@@ -1677,6 +1677,8 @@ def ai_weekly_assessment():
         "ETH": [5,70,0,70],             "ZAF": [28,620,10,630],
         "KEN": [15,110,0,100],          "NZL": [15,160,20,140],
         "GRC": [30,300,10,280],         "CUB": [5,130,50,90],
+        "GEO": [4,60,0,60],             "MNG": [3,30,0,30],
+        "NPL": [3,40,0,40],
     }
 
     HORMUZ_EXPOSURE = {
@@ -1686,7 +1688,7 @@ def ai_weekly_assessment():
         "USA": 500,  "AUS": 180,  "EGY": 200,  "PAK": 450,  "BGD": 300,
         "LKA": 120,  "LBN": 80,   "JOR": 180,  "TWN": 900,  "PHL": 350,
         "ISR": 150,  "ETH": 50,   "ZAF": 300,  "KEN": 80,   "NZL": 100,
-        "GRC": 100,
+        "GRC": 100,  "GEO": 15,   "MNG": 20,   "NPL": 25,
     }
     HORMUZ_EXPORTERS = {"SAU": 7000, "ARE": 2500, "KWT": 1800, "IRQ": 3500, "QAT": 1200}
 
